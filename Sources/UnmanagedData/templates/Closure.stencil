@@ -13,8 +13,16 @@ import CoreData
         case didChange
         case didDelete
     }
-    
-    {{ accessModifier }} var onEventBlock: ((_ event: ObjectEvent, _ object: {{ entity.name }}) -> Void)?
+
+    {{ accessModifier }} var onEventBlock: ((_ event: ObjectEvent, _ object: {{ entity.name }}) -> Void)? {
+        didSet {
+            if onEventBlock != nil, oldValue == nil {
+                subsribeContext()
+            } else if onEventBlock == nil, oldValue != nil {
+                unsubsribeContext()
+            }
+        }
+    }
     {% endif %}
 
     private let __managedObject: {{ entity.managedName }}
@@ -70,12 +78,9 @@ import CoreData
         {% for attribute in entity.attributes %}
         self.{{ attribute.name }} = {{ attribute.name }}{% if not attribute.isOptional %}!{% endif %}{% endfor %}
 
-        {% if entity.parentName %}super.init(managedObject){% else %}subsribeContext(){% endif %}
+        {% if entity.parentName %}super.init(managedObject){% endif %}
     }
     {% if not entity.parentName %}
-    deinit {
-        unsubsribeContext()
-    }
     
     private func subsribeContext() {
         __observer = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextObjectsDidChange, object: __context, queue: nil) { [weak self] notification in

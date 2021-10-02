@@ -30,7 +30,10 @@ struct UnmanagedData: ParsableCommand {
     var replace = false
     
     @Option(name: .customLong("generate"), parsing: .next, help: "Generate code for \(templates.joined(separator: "|"))")
-    var templateName: String = "Block"
+    var templateName: String = "Closure"
+    
+    @Option(name: .customLong("template"), parsing: .next, help: "Path to custom template.", transform: URL.init(fileURLWithPath:))
+    var customTemplate: URL?
     
     @Option(name: .customLong("prefix"), parsing: .next, help: "Generated entity name prefix")
     var namePrefix: String = ""
@@ -60,9 +63,16 @@ struct UnmanagedData: ParsableCommand {
     }
 
     private func template() throws -> Stencil.Template {
-        let templatesPath = Path(templatesURL.path)
-        let environment = Environment(loader: FileSystemLoader(paths: [templatesPath]))
-        return try environment.loadTemplate(name: templateName + ".stencil")
+        if let url = customTemplate  {
+            let templatesPath = Path(url.deletingLastPathComponent().path)
+            let environment = Environment(loader: FileSystemLoader(paths: [templatesPath]))
+            return try environment.loadTemplate(name: url.lastPathComponent)
+        }
+        else {
+            let templatesPath = Path(templatesURL.path)
+            let environment = Environment(loader: FileSystemLoader(paths: [templatesPath]))
+            return try environment.loadTemplate(name: templateName + ".stencil")
+        }
     }
     
     mutating func validate() throws {
