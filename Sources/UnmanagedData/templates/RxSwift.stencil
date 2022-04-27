@@ -23,7 +23,7 @@ import CoreData
     {% if entity.parentName %}override {% endif %}{{ accessModifier }} var managedObject: {{ entity.managedName }} { __managedObject }
 
     {% for attribute in entity.attributes %}
-    {{ accessModifier }} var {{ attribute.name }}: BehaviorSubject<{{ attribute.type }}>{% endfor %}
+    {{ accessModifier }} let {{ attribute.name }}: BehaviorSubject<{{ attribute.type }}>{% endfor %}
     
     {% for attribute in entity.relationships %}
     {{ accessModifier }} var {{ attribute.name }}: {{ attribute.type }} {
