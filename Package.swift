@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         .package(url: "https://github.com/MaxDesiatov/XMLCoder.git", .upToNextMajor(from: "0.0.0")),
-        .package(url: "https://github.com/apple/swift-argument-parser", .upToNextMajor(from: "0.0.0")),
+        .package(url: "https://github.com/apple/swift-argument-parser", .upToNextMajor(from: "1.0.0")),
         .package(url: "https://github.com/stencilproject/Stencil", .upToNextMajor(from: "0.0.0")),
     ],
     targets: [
