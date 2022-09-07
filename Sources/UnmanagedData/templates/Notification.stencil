@@ -25,13 +25,13 @@ import CoreData
     {% for attribute in entity.relationships %}
     {{ accessModifier }} var {{ attribute.name }}: {{ attribute.type }} {
         let managedResult = __managedObject.{{ attribute.name }}{{ attribute.unwrapTransform }}
-        {% if attribute.isArray and attribute.isOptional %}
+        {% if attribute.isSet and attribute.isOptional %}
         return managedResult?.map { {{ attribute.instanceType }}($0) }
-        {% elif attribute.isArray and not attribute.isOptional %}
+        {% elif attribute.isSet and not attribute.isOptional %}
         return managedResult.map { {{ attribute.instanceType }}($0) }
-        {% elif not attribute.isArray and attribute.isOptional %}
+        {% elif not attribute.isSet and attribute.isOptional %}
         return managedResult != nil ? {{ attribute.instanceType }}(managedResult!) : nil
-        {% elif not attribute.isArray and not attribute.isOptional %}
+        {% elif not attribute.isSet and not attribute.isOptional %}
         return {{ attribute.instanceType }}(managedResult)
         {% endif %}
     }
@@ -40,13 +40,13 @@ import CoreData
     {% for attribute in entity.fetchedProperties %}
     {{ accessModifier }} var {{ attribute.name }}: {{ attribute.type }} {
         let managedResult = __managedObject.value(forKey: "{{ attribute.name }}"){{ attribute.unwrapTransform }}
-        {% if attribute.isArray and attribute.isOptional %}
+        {% if attribute.isSet and attribute.isOptional %}
         return managedResult?.map { {{ attribute.instanceType }}($0) }
-        {% elif attribute.isArray and not attribute.isOptional %}
+        {% elif attribute.isSet and not attribute.isOptional %}
         return managedResult.map { {{ attribute.instanceType }}($0) }
-        {% elif not attribute.isArray and attribute.isOptional %}
+        {% elif not attribute.isSet and attribute.isOptional %}
         return managedResult != nil ? {{ attribute.instanceType }}(managedResult!) : nil
-        {% elif not attribute.isArray and not attribute.isOptional %}
+        {% elif not attribute.isSet and not attribute.isOptional %}
         return {{ attribute.instanceType }}(managedResult)
         {% endif %}
     }

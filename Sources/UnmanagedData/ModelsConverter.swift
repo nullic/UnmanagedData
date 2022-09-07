@@ -8,6 +8,16 @@ struct ConvertModelContext {
     let module: String?
 }
 
+extension String {
+    func capitalizingFirstLetter() -> String {
+        return prefix(1).capitalized + dropFirst()
+    }
+
+    mutating func capitalizeFirstLetter() {
+        self = self.capitalizingFirstLetter()
+    }
+}
+
 extension CoreData.Model {
     func templateModels(accessModifier: String, nonClassAccessModifier: String, managedModelsModule module: String?, modelNameMappper: @escaping StringMapper) -> [Template.Model] {
         let context = ConvertModelContext(allEntities: entities, modelNameMappper: modelNameMappper, module: module)
@@ -40,20 +50,23 @@ extension CoreData.Entity {
 
 extension CoreData.Attribute {
     func templateAttribute(context: ConvertModelContext) -> Template.Attribute {
+        let usesScalarValueType = self.usesScalarValueType ?? false
         let type = (attributeType.scalarTypeString ?? customClassName!) + (optional ? "?" : "")
-        let unwrapTransform = attributeType.unwrapTransform(usesScalarValueType: (usesScalarValueType ?? false), isOptional: optional)
-        return Template.Attribute(name: name, type: type, unwrapTransform: unwrapTransform, isOptional: optional)
+        let managedType = attributeType.managedTypeString(usesScalarValueType: usesScalarValueType, isOptional: optional) ?? (customClassName! + (optional ? "?" : ""))
+        let unwrapTransform = attributeType.unwrapTransform(usesScalarValueType: usesScalarValueType, isOptional: optional)
+        return Template.Attribute(name: name, type: type, managedType: managedType, unwrapTransform: unwrapTransform, isOptional: optional)
     }
 }
 
 extension CoreData.Relationship {
     func templateAttribute(context: ConvertModelContext) -> Template.Relationship {
         let instanceType = context.modelNameMappper(destinationEntity)
-        var managedType = context.allEntities.first(where: { $0.name == destinationEntity })!.representedClassName
-        managedType = context.module != nil ? (context.module! + "." + managedType) : managedType
+        var objectType = context.allEntities.first(where: { $0.name == destinationEntity })!.representedClassName
+        objectType = context.module != nil ? (context.module! + "." + objectType) : objectType
         
         let toOne = maxCount == 1
         let type = (toOne ? instanceType : "[\(instanceType)]") + (optional ? "?" : "")
+        let managedType = (toOne ? instanceType : (ordered ? "NSOrderedSet" : "NSSet")) + (optional ? "?" : "!")
         
         let unwrapTransform: String?
         if optional && toOne {
@@ -61,25 +74,25 @@ extension CoreData.Relationship {
         } else if !optional && toOne {
             unwrapTransform = "!"
         } else if optional && !toOne {
-            unwrapTransform = "?.\(ordered ? "array" : "allObjects") as? [\(managedType)]"
+            unwrapTransform = "?.\(ordered ? "array" : "allObjects") as? [\(objectType)]"
         } else {// if !optional && !isToOne {
-            unwrapTransform = "?..\(ordered ? "array" : "allObjects") as! [\(managedType)]"
+            unwrapTransform = "?..\(ordered ? "array" : "allObjects") as! [\(objectType)]"
         }
         
-        return Template.Relationship(name: name, type: type, unwrapTransform: unwrapTransform, instanceType: instanceType, isArray: !toOne, isOptional: optional)
+        return Template.Relationship(name: name, capitalizedName: name.capitalizingFirstLetter(), type: type, managedType: managedType, relationshipType: instanceType, unwrapTransform: unwrapTransform, instanceType: instanceType, isSet: !toOne, isOrdered: ordered, isOptional: optional)
     }
 }
 
 extension CoreData.FetchedProperty {
     func templateAttribute(context: ConvertModelContext) -> Template.Relationship {
         let instanceType = context.modelNameMappper(fetchRequest.entity)
-        var managedType = context.allEntities.first(where: { $0.name == fetchRequest.entity })!.representedClassName
-        managedType = context.module != nil ? (context.module! + "." + managedType) : managedType
+        var objectType = context.allEntities.first(where: { $0.name == fetchRequest.entity })!.representedClassName
+        objectType = context.module != nil ? (context.module! + "." + objectType) : objectType
         
         let type = "[\(instanceType)]" + (optional ? "?" : "")
-        let unwrapTransform = optional ? " as? [\(managedType)]" : " as! [\(managedType)]"
+        let unwrapTransform = optional ? " as? [\(objectType)]" : " as! [\(objectType)]"
         
-        return Template.Relationship(name: name, type: type, unwrapTransform: unwrapTransform, instanceType: instanceType, isArray: true, isOptional: optional)
+        return Template.Relationship(name: name, capitalizedName: name.capitalizingFirstLetter(), type: type, managedType: type, relationshipType: instanceType, unwrapTransform: unwrapTransform, instanceType: instanceType, isSet: true, isOrdered: false, isOptional: optional)
     }
 }
 
@@ -95,6 +108,26 @@ extension CoreData.AttributeType {
         case .bool: return "Bool"
         case .uri: return "URL"
         case .transformable: return nil
+        }
+    }
+    
+    func managedTypeString(usesScalarValueType: Bool, isOptional: Bool) -> String? {
+        if !usesScalarValueType {
+            switch self {
+            case .int16, .int32, .int64, .double, .bool: return "NSNumber" + (isOptional ? "?" : "!")
+            default: break
+            }
+        }
+        
+        guard let unwrapedType = scalarTypeString else { return nil }
+        
+        switch self {
+        case .int16, .int32, .int64, .double, .bool:
+            return unwrapedType
+        case .date, .string, .uri:
+            return unwrapedType + (isOptional ? "?" : "!")
+        case .transformable:
+            return nil
         }
     }
     

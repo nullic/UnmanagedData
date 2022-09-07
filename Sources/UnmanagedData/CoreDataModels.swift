@@ -28,7 +28,7 @@ struct CoreData {
         let name: String
         let parentEntity: String?
         let representedClassName: String
-        let codeGenerationType: CodeGenerationType
+        let codeGenerationType: CodeGenerationType?
         let attributes: [Attribute]
         let relationships: [Relationship]
         let fetchedProperties: [FetchedProperty]

@@ -38,13 +38,13 @@ import CoreData
         var result: {{ attribute.type }}?
         __managedObject.managedObjectContext!.performAndWait {
             let managedResult = __managedObject.{{ attribute.name }}{{ attribute.unwrapTransform }}
-            {% if attribute.isArray and attribute.isOptional %}
+            {% if attribute.isSet and attribute.isOptional %}
             result = managedResult?.map { {{ attribute.instanceType }}($0) }
-            {% elif attribute.isArray and not attribute.isOptional %}
+            {% elif attribute.isSet and not attribute.isOptional %}
             result = managedResult.map { {{ attribute.instanceType }}($0) }
-            {% elif not attribute.isArray and attribute.isOptional %}
+            {% elif not attribute.isSet and attribute.isOptional %}
             result = managedResult != nil ? {{ attribute.instanceType }}(managedResult!) : nil
-            {% elif not attribute.isArray and not attribute.isOptional %}
+            {% elif not attribute.isSet and not attribute.isOptional %}
             result = {{ attribute.instanceType }}(managedResult)
             {% endif %}
         }
@@ -57,13 +57,13 @@ import CoreData
         var result: {{ attribute.type }}?
         __managedObject.managedObjectContext!.performAndWait {
             let managedResult = __managedObject.value(forKey: "{{ attribute.name }}"){{ attribute.unwrapTransform }}
-            {% if attribute.isArray and attribute.isOptional %}
+            {% if attribute.isSet and attribute.isOptional %}
             result = managedResult?.map { {{ attribute.instanceType }}($0) }
-            {% elif attribute.isArray and not attribute.isOptional %}
+            {% elif attribute.isSet and not attribute.isOptional %}
             result = managedResult.map { {{ attribute.instanceType }}($0) }
-            {% elif not attribute.isArray and attribute.isOptional %}
+            {% elif not attribute.isSet and attribute.isOptional %}
             result = managedResult != nil ? {{ attribute.instanceType }}(managedResult!) : nil
-            {% elif not attribute.isArray and not attribute.isOptional %}
+            {% elif not attribute.isSet and not attribute.isOptional %}
             result = {{ attribute.instanceType }}(managedResult)
             {% endif %}
         }

@@ -36,6 +36,7 @@ struct Template {
     struct Attribute: Codable {
         let name: String
         let type: String
+        let managedType: String
         let unwrapTransform: String?
         
         let isOptional: Bool
@@ -43,11 +44,15 @@ struct Template {
     
     struct Relationship: Codable {
         let name: String
+        let capitalizedName: String
         let type: String
+        let managedType: String
+        let relationshipType: String
         let unwrapTransform: String?
         
         let instanceType: String
-        let isArray: Bool
+        let isSet: Bool
+        let isOrdered: Bool
         let isOptional: Bool
     }
 }

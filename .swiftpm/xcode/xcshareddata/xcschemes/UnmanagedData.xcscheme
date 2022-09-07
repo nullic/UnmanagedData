@@ -67,7 +67,15 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "/Users/nullic/work/Messenger/Packages/MessengerCore/Sources/MessengerCore/Storage/Model.xcdatamodeld/Model.xcdatamodel /Users/nullic/work/Messenger/Packages/MessengerCoreObjects/Sources/MessengerCoreObjects/RxModels --generate RxSwift --prefix Rx --module MessengerCore --replace"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "/Users/nullic/work/Messenger/Packages/MessengerCore/Sources/MessengerCore/Storage/Model.xcdatamodeld/Model.xcdatamodel /Users/nullic/work/Messenger/Packages/MessengerCore/Sources/MessengerCore/Storage/Entities --generate Managed --replace"
             isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "&quot;/Users/nullic/work/Messenger/Packages/MessengerCore/Sources/MessengerCore/Storage/Model.xcdatamodeld/Model_v2.xcdatamodel&quot; &quot;/Users/nullic/work/Messenger/Packages/MessengerCoreObjects/Sources/MessengerCoreObjects/Models&quot; --module MessengerCore --replace --template &quot;/Users/nullic/work/Messenger/Closure.stencil&quot;"
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "/Users/nullic/work/Messenger/Packages/MessengerCore/Sources/MessengerCore/Storage/Model.xcdatamodeld/Model.xcdatamodel /Users/nullic/work/Messenger/Packages/MessengerCoreObjects/Sources/MessengerCoreObjects/Models --module MessengerCore --replace"
