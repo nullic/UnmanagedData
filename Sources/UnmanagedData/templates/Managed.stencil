@@ -6,6 +6,7 @@ import Foundation
 import CoreData
 {% if import %}import {{ import }}{% endif %}
 
+@objc({{ entity.managedName }})
 {{ accessModifier }} class {{ entity.name }}{% if entity.parentName %}: {{ entity.parentName }}{% else %}: NSManagedObject{% endif %} {
     @nonobjc {{ accessModifier }} class func fetchRequest() -> NSFetchRequest<{{ entity.name }}> {
         return NSFetchRequest<{{ entity.name }}>(entityName: "{{ entity.managedName }}")
