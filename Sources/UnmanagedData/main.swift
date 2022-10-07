@@ -3,146 +3,112 @@ import XMLCoder
 import ArgumentParser
 import Stencil
 import PathKit
-
-private let templateExtension = ".stencil"
-private let templatesURL: URL! = Bundle.module.resourceURL?.appendingPathComponent("templates")
-private var templates: [String] = {
-    var result: [String]?
-    if let templatesURL = templatesURL {
-        let paths = try? FileManager.default.contentsOfDirectory(atPath: templatesURL.path)
-        result = paths?.filter { $0.hasSuffix(templateExtension) }.map { file -> String in
-            var copy = file
-            copy.removeLast(templateExtension.count)
-            return copy
-        }
-    }
-    return result ?? []
-}()
+import MoreCodable
+import StencilSwiftKit
 
 struct UnmanagedData: ParsableCommand {
     @Argument(help: "Path to model XML or .xcdatamodel", transform: URL.init(fileURLWithPath:))
-    var pathToFile: URL
+    var modelURL: URL
     
-    @Argument(help: "Generated models output folder", transform: URL.init(fileURLWithPath:))
-    var outputFolder: URL
+    @Option(name: .customLong("output"), help: "Generated models output folder", transform: URL.init(fileURLWithPath:))
+    var outputURL: URL
     
-    @Flag(help: "Replace folder content (remove all folder content)")
-    var replace = false
-    
-    @Option(name: .customLong("generate"), parsing: .next, help: "Generate code for \(templates.joined(separator: "|"))")
-    var templateName: String = "Closure"
-    
-    @Option(name: .customLong("template"), parsing: .next, help: "Path to custom template.", transform: URL.init(fileURLWithPath:))
-    var customTemplate: URL?
-    
-    @Option(name: .customLong("prefix"), parsing: .next, help: "Generated entity name prefix")
-    var namePrefix: String = ""
-    
-    @Option(name: .customLong("suffix"), parsing: .next, help: "Generated entity name suffix")
-    var nameSuffix: String = ""
-    
-    @Option(name: .customLong("access"), parsing: .next, help: "Generate code access modifier public|open|internal")
-    var accessModifier: String = "public"
-    private var nonClassAccessModifier: String {
-        if accessModifier == "open" {
-           return "public"
-        } else {
-            return accessModifier
-        }
-    }
-    
-    @Option(name: .customLong("module"), parsing: .next, help: "Managed objects module name")
-    var module: String?
+    @Option(name: .customLong("template"), parsing: .next, help: "Path to template.", transform: URL.init(fileURLWithPath:))
+    var templateURL: URL
     
     private var modelXMLURL: URL {
-        if pathToFile.pathExtension == "xcdatamodel" {
-            return pathToFile.appendingPathComponent("contents")
+        if modelURL.pathExtension == "xcdatamodel" {
+            return modelURL.appendingPathComponent("contents")
         } else {
-            return pathToFile
+            return modelURL
         }
     }
 
-    private func template() throws -> Stencil.Template {
-        if let url = customTemplate  {
-            let templatesPath = Path(url.deletingLastPathComponent().path)
-            let environment = Environment(loader: FileSystemLoader(paths: [templatesPath]))
-            return try environment.loadTemplate(name: url.lastPathComponent)
+    private func loadTemplate() throws -> Stencil.Template {
+        let isAcccessing = templateURL.startAccessingSecurityScopedResource()
+        defer {
+            if isAcccessing { templateURL.stopAccessingSecurityScopedResource() }
         }
-        else {
-            let templatesPath = Path(templatesURL.path)
-            let environment = Environment(loader: FileSystemLoader(paths: [templatesPath]))
-            return try environment.loadTemplate(name: templateName + ".stencil")
+
+        let templatesPath = Path(templateURL.deletingLastPathComponent().path)
+        return try stencilSwiftEnvironment(templatePaths: [templatesPath]).loadTemplate(name: templateURL.lastPathComponent)
+    }
+    
+    private var canonicalName: String {
+        if modelURL.pathExtension.isEmpty {
+            return "\(modelURL.lastPathComponent).generated.swift"
+        } else {
+            return "\(modelURL.deletingPathExtension().lastPathComponent).generated.swift"
         }
+    }
+    
+    private var canonicalOutput: URL {
+        outputURL.pathExtension == "swift" ? outputURL : outputURL.appendingPathComponent(canonicalName)
     }
     
     mutating func validate() throws {
+        let isAcccessing = modelXMLURL.startAccessingSecurityScopedResource()
         guard FileManager.default.fileExists(atPath: modelXMLURL.path) else {
             throw ValidationError("File does not exist at \(modelXMLURL.path)")
         }
-        
-        guard templatesURL != nil else {
-            throw ValidationError("Could not find templates folder")
-        }
-        
-        let templateName = self.templateName + templateExtension
-        guard FileManager.default.fileExists(atPath: templatesURL.appendingPathComponent(templateName).path) else {
-            throw ValidationError("Could not find template for '\(self.templateName)'")
-        }
-        
-        guard ["public", "open", "internal"].contains(accessModifier) else {
-            throw ValidationError("Invalid access modifier")
-        }
+        if isAcccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
     }
 
     mutating func run() throws {
-        print(pathToFile.path)
-        print(outputFolder.path)
-
-        let template = try self.template()
+        let template = try loadTemplate()
        
         let isAcccessing = modelXMLURL.startAccessingSecurityScopedResource()
         let data = try Data(contentsOf: modelXMLURL)
         if isAcccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
         
-        let model = try XMLDecoder().decode(CoreData.Model.self, from: data)
+        let model = try XMLDecoder().decode(CoreDataModel.self, from: data)
+        let dictionary = try DictionaryEncoder().encode(model)
         
-        try createOutputFolderIfNeeded()
-        if replace {
-            try removeOutputFolderContent()
-        }
+        let result = try template.render(dictionary)
+        guard !result.isEmpty else { return }
         
-        let namePrefix = self.namePrefix
-        let nameSuffix = self.nameSuffix
-        let mapper: StringMapper = { namePrefix + $0 + nameSuffix }
+        let regexp = try NSRegularExpression(pattern: "^\\/\\/\\s?unmanageddata:file:(?<filename>.+?)$(?<content>.+?)^\\/\\/\\s?unmanageddata:file:end$", options: [.dotMatchesLineSeparators, .anchorsMatchLines])
+        let matches = regexp.matches(in: result, range: NSRange(location: 0, length: result.count))
         
-        let templatesData = model.templateModels(accessModifier: accessModifier, nonClassAccessModifier: nonClassAccessModifier, managedModelsModule: module, modelNameMappper: mapper)
-        for context in templatesData {
-            let result = try template.render(context.dictionary)
-            let filePath = outputFolder.appendingPathComponent(context.entity.name).appendingPathExtension("swift").path
-
-            do {
-                print("Write model to \(filePath)")
-                try result.write(toFile: filePath, atomically: true, encoding: .utf8)
-            } catch {
-                print("Failed to write file \(filePath) with error: \(error.localizedDescription)")
+        if matches.isEmpty {
+            try write(content: result, to: canonicalOutput)
+        } else {
+            let mutableString = NSMutableString(string: result)
+            for match in matches.reversed() {
+                let filename = mutableString.substring(with: match.range(withName: "filename"))
+                let content = mutableString.substring(with: match.range(withName: "content"))
+             
+                let fileURL = outputURL.appendingPathComponent(filename)
+                try write(content: content.trimmingCharacters(in: .whitespacesAndNewlines), to: fileURL)
+                
+                mutableString.replaceCharacters(in: match.range, with: "")
+            }
+            
+            let reminder = mutableString.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !reminder.isEmpty {
+                try write(content: reminder, to: canonicalOutput)
             }
         }
     }
     
-    private func createOutputFolderIfNeeded() throws {
-        if FileManager.default.fileExists(atPath: outputFolder.path) == false {
-            print("Creating ... \(outputFolder.path)")
-            try FileManager.default.createDirectory(atPath: outputFolder.path, withIntermediateDirectories: true)
+    private func createOutputFolderIfNeeded(folder: URL) throws {
+        if FileManager.default.fileExists(atPath: folder.path) == false {
+            try FileManager.default.createDirectory(atPath: folder.path, withIntermediateDirectories: true)
         }
     }
     
-    private func removeOutputFolderContent() throws {
-        let paths = try FileManager.default.contentsOfDirectory(atPath: outputFolder.path)
-        for path in paths {
-            let itemUrl = outputFolder.appendingPathComponent(path)
-            print("Removing ... \(itemUrl.path)")
-            try FileManager.default.removeItem(at: itemUrl)
-        }
+    private func write(content: String, to: URL) throws {
+        let fullContent =
+"""
+// Generated using UnmagedData
+// DO NOT EDIT
+
+\(content)
+
+
+"""
+        try createOutputFolderIfNeeded(folder: to.deletingLastPathComponent())
+        try fullContent.write(toFile: to.path, atomically: true, encoding: .utf8)
     }
 }
 
