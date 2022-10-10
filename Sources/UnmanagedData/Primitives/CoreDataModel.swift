@@ -1,9 +1,9 @@
 import Foundation
 
 struct CoreDataModel {
-    let type: String
-    let documentVersion: String
-    let entities: [Entity]
+    var type: String
+    var documentVersion: String
+    var entities: [Entity]
 }
 
 extension CoreDataModel: Codable {
@@ -31,5 +31,16 @@ extension CoreDataModel: Codable {
         try container.encode(self.type, forKey: .type)
         try container.encode(self.documentVersion, forKey: .documentVersion)
         try container.encode(self.entities, forKey: .entities)
+    }
+    
+    func populateMissingData() {
+        for entity in entities {
+            for relation in entity.relationships {
+                relation.destinationClassName = entities.first(where: { relation.destinationEntity == $0.name })?.className
+                if let inverseEntity = relation.inverseEntity {
+                    relation.inverseClassName = entities.first(where: { inverseEntity == $0.name })?.className
+                }
+            }
+        }
     }
 }

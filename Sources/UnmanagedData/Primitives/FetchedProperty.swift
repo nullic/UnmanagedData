@@ -1,12 +1,23 @@
 import Foundation
 
-struct FetchedProperty: Codable {
-    let name: String
-    let optional: Bool
-    let fetchRequest: FetchRequest
+final class FetchedProperty: Codable {
+    var name: String
+    var optional: Bool
+    var fetchRequest: FetchRequest
+    
+    init(name: String, optional: Bool, fetchRequest: FetchRequest) {
+        self.name = name
+        self.optional = optional
+        self.fetchRequest = fetchRequest
+    }
 }
 
-struct FetchRequest: Codable {
-    let name: String
-    let entity: String
+final class FetchRequest: Codable {
+    var name: String
+    var entity: String
+    
+    init(name: String, entity: String) {
+        self.name = name
+        self.entity = entity
+    }
 }

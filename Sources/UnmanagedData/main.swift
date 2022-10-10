@@ -16,12 +16,22 @@ struct UnmanagedData: ParsableCommand {
     @Option(name: .customLong("template"), parsing: .next, help: "Path to template.", transform: URL.init(fileURLWithPath:))
     var templateURL: URL
     
+    // MARK: -
+    
     private var modelXMLURL: URL {
         if modelURL.pathExtension == "xcdatamodel" {
             return modelURL.appendingPathComponent("contents")
         } else {
             return modelURL
         }
+    }
+    
+    private func loadModelData() throws -> Data {
+        let isAcccessing = modelXMLURL.startAccessingSecurityScopedResource()
+        defer {
+            if isAcccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
+        }
+        return try Data(contentsOf: modelXMLURL)
     }
 
     private func loadTemplate() throws -> Stencil.Template {
@@ -35,10 +45,10 @@ struct UnmanagedData: ParsableCommand {
     }
     
     private var canonicalName: String {
-        if modelURL.pathExtension.isEmpty {
-            return "\(modelURL.lastPathComponent).generated.swift"
+        if templateURL.pathExtension.isEmpty {
+            return "\(templateURL.lastPathComponent).generated.swift"
         } else {
-            return "\(modelURL.deletingPathExtension().lastPathComponent).generated.swift"
+            return "\(templateURL.deletingPathExtension().lastPathComponent).generated.swift"
         }
     }
     
@@ -53,17 +63,17 @@ struct UnmanagedData: ParsableCommand {
         }
         if isAcccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
     }
+    
+    // MARK: - Run
 
     mutating func run() throws {
-        let template = try loadTemplate()
-       
-        let isAcccessing = modelXMLURL.startAccessingSecurityScopedResource()
-        let data = try Data(contentsOf: modelXMLURL)
-        if isAcccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
-        
+        let data = try loadModelData()
         let model = try XMLDecoder().decode(CoreDataModel.self, from: data)
+        model.populateMissingData()
+        
         let dictionary = try DictionaryEncoder().encode(model)
         
+        let template = try loadTemplate()
         let result = try template.render(dictionary)
         guard !result.isEmpty else { return }
         
@@ -91,6 +101,8 @@ struct UnmanagedData: ParsableCommand {
         }
     }
     
+    // MARK: - Write result
+    
     private func createOutputFolderIfNeeded(folder: URL) throws {
         if FileManager.default.fileExists(atPath: folder.path) == false {
             try FileManager.default.createDirectory(atPath: folder.path, withIntermediateDirectories: true)
@@ -111,5 +123,7 @@ struct UnmanagedData: ParsableCommand {
         try fullContent.write(toFile: to.path, atomically: true, encoding: .utf8)
     }
 }
+
+// MARK: -
 
 UnmanagedData.main()

@@ -9,6 +9,22 @@ struct Attribute {
     let transformerName: String?
     let customClassName: String?
     
+    var usesPrimitiveValue: Bool {
+        let usesScalarValue = self.usesScalarValue ?? false
+
+        switch type {
+        case .date: return false
+        case .int16: return usesScalarValue
+        case .int32: return usesScalarValue
+        case .int64: return usesScalarValue
+        case .double: return usesScalarValue
+        case .string: return false
+        case .bool: return usesScalarValue
+        case .uri: return false
+        case .transformable: return false
+        }
+    }
+    
     var swiftType: String {
         let usesScalarValue = self.usesScalarValue ?? false
 
@@ -46,6 +62,7 @@ extension Attribute: Codable {
         case transformerName
         case customClassName
         case swiftType
+        case usesPrimitiveValue
     }
     
     init(from decoder: Decoder) throws {
@@ -67,6 +84,7 @@ extension Attribute: Codable {
         try container.encode(self.type, forKey: .type)
         try container.encode(self.swiftType, forKey: .swiftType)
         try container.encodeIfPresent(self.usesScalarValue, forKey: .usesScalarValue)
+        try container.encode(self.usesPrimitiveValue, forKey: .usesPrimitiveValue)
         try container.encodeIfPresent(self.defaultValue, forKey: .defaultValue)
         try container.encodeIfPresent(self.transformerName, forKey: .transformerName)
         try container.encodeIfPresent(self.customClassName, forKey: .customClassName)

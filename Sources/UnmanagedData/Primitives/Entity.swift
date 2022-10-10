@@ -1,13 +1,23 @@
 import Foundation
 
-struct Entity {
-    let name: String
-    let parentName: String?
-    let className: String
-    let codeGenerationType: CodeGenerationType?
-    let attributes: [Attribute]
-    let relationships: [Relationship]
-    let fetchedProperties: [FetchedProperty]
+final class Entity {
+    var name: String
+    var parentName: String?
+    var className: String
+    var codeGenerationType: CodeGenerationType?
+    var attributes: [Attribute]
+    var relationships: [Relationship]
+    var fetchedProperties: [FetchedProperty]
+    
+    init(name: String, parentName: String?, className: String, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty]) {
+        self.name = name
+        self.parentName = parentName
+        self.className = className
+        self.codeGenerationType = codeGenerationType
+        self.attributes = attributes
+        self.relationships = relationships
+        self.fetchedProperties = fetchedProperties
+    }
 }
 
 extension Entity: Codable {
@@ -31,17 +41,19 @@ extension Entity: Codable {
         case fetchedProperties
     }
     
-    init(from decoder: Decoder) throws {
+    convenience init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DecodingKeys.self)
-        self.name = try container.decode(String.self, forKey: .name)
-        self.parentName = try container.decodeIfPresent(String.self, forKey: .parentName)
-        self.className = try container.decode(String.self, forKey: .className)
-        self.codeGenerationType = try container.decodeIfPresent(CodeGenerationType.self, forKey: .codeGenerationType)
-        self.attributes = try container.decode([Attribute].self, forKey: .attributes)
-        self.relationships = try container.decode([Relationship].self, forKey: .relationships)
-        self.fetchedProperties = try container.decode([FetchedProperty].self, forKey: .fetchedProperties)
+        let name = try container.decode(String.self, forKey: .name)
+        let parentName = try container.decodeIfPresent(String.self, forKey: .parentName)
+        let className = try container.decode(String.self, forKey: .className)
+        let codeGenerationType = try container.decodeIfPresent(CodeGenerationType.self, forKey: .codeGenerationType)
+        let attributes = try container.decode([Attribute].self, forKey: .attributes)
+        let relationships = try container.decode([Relationship].self, forKey: .relationships)
+        let fetchedProperties = try container.decode([FetchedProperty].self, forKey: .fetchedProperties)
+        
+        self.init(name: name, parentName: parentName, className: className, codeGenerationType: codeGenerationType, attributes: attributes, relationships: relationships, fetchedProperties: fetchedProperties)
     }
-    
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: EncodingKeys.self)
         try container.encode(self.name, forKey: .name)
