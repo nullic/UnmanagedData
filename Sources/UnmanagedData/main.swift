@@ -13,8 +13,12 @@ struct UnmanagedData: ParsableCommand {
     @Option(name: .customLong("output"), help: "Generated models output folder", transform: URL.init(fileURLWithPath:))
     var outputURL: URL
     
-    @Option(name: .customLong("template"), parsing: .next, help: "Path to template.", transform: URL.init(fileURLWithPath:))
-    var templateURL: URL
+    @Option(name: .customLong("template"), help: "Path to template.")
+    var templatePaths: [String]
+
+    private lazy var templateURLs: [URL] = templatePaths.map { URL(fileURLWithPath: $0) }
+    
+    private lazy var resultContentPerFile: [URL: String] = [:]
     
     // MARK: -
     
@@ -34,7 +38,7 @@ struct UnmanagedData: ParsableCommand {
         return try Data(contentsOf: modelXMLURL)
     }
 
-    private func loadTemplate() throws -> Stencil.Template {
+    private func loadTemplate(at templateURL: URL) throws -> Stencil.Template {
         let isAcccessing = templateURL.startAccessingSecurityScopedResource()
         defer {
             if isAcccessing { templateURL.stopAccessingSecurityScopedResource() }
@@ -42,18 +46,6 @@ struct UnmanagedData: ParsableCommand {
 
         let templatesPath = Path(templateURL.deletingLastPathComponent().path)
         return try stencilSwiftEnvironment(templatePaths: [templatesPath]).loadTemplate(name: templateURL.lastPathComponent)
-    }
-    
-    private var canonicalName: String {
-        if templateURL.pathExtension.isEmpty {
-            return "\(templateURL.lastPathComponent).generated.swift"
-        } else {
-            return "\(templateURL.deletingPathExtension().lastPathComponent).generated.swift"
-        }
-    }
-    
-    private var canonicalOutput: URL {
-        outputURL.pathExtension == "swift" ? outputURL : outputURL.appendingPathComponent(canonicalName)
     }
     
     mutating func validate() throws {
@@ -72,37 +64,65 @@ struct UnmanagedData: ParsableCommand {
         model.populateMissingData()
         
         let dictionary = try DictionaryEncoder().encode(model)
-        
-        let template = try loadTemplate()
-        let result = try template.render(dictionary)
-        guard !result.isEmpty else { return }
-        
         let regexp = try NSRegularExpression(pattern: "^\\/\\/\\s?unmanageddata:file:(?<filename>.+?)$(?<content>.+?)^\\/\\/\\s?unmanageddata:file:end$", options: [.dotMatchesLineSeparators, .anchorsMatchLines])
-        let matches = regexp.matches(in: result, range: NSRange(location: 0, length: result.count))
         
-        if matches.isEmpty {
-            try write(content: result, to: canonicalOutput)
-        } else {
-            let mutableString = NSMutableString(string: result)
-            for match in matches.reversed() {
-                let filename = mutableString.substring(with: match.range(withName: "filename"))
-                let content = mutableString.substring(with: match.range(withName: "content"))
-             
-                let fileURL = outputURL.appendingPathComponent(filename)
-                try write(content: content.trimmingCharacters(in: .whitespacesAndNewlines), to: fileURL)
-                
-                mutableString.replaceCharacters(in: match.range, with: "")
-            }
+        for templateURL in templateURLs {
+            let template = try loadTemplate(at: templateURL)
+            let result = try template.render(dictionary)
+            guard !result.isEmpty else { return }
             
-            let reminder = mutableString.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !reminder.isEmpty {
-                try write(content: reminder, to: canonicalOutput)
+            
+            let canonicalName: String
+            if templateURL.pathExtension.isEmpty {
+                canonicalName = "\(templateURL.lastPathComponent).generated.swift"
+            } else {
+                canonicalName = "\(templateURL.deletingPathExtension().lastPathComponent).generated.swift"
+            }
+            let canonicalOutput = outputURL.pathExtension == "swift" ? outputURL : outputURL.appendingPathComponent(canonicalName)
+            
+            let matches = regexp.matches(in: result, range: NSRange(location: 0, length: result.count))
+            
+            if matches.isEmpty {
+                append(content: result, toFileAt: canonicalOutput)
+            } else {
+                let mutableString = NSMutableString(string: result)
+                for match in matches.reversed() {
+                    let filename = mutableString.substring(with: match.range(withName: "filename"))
+                    let content = mutableString.substring(with: match.range(withName: "content"))
+                    
+                    let fileURL = outputURL.appendingPathComponent(filename)
+                    append(content: content.trimmingCharacters(in: .whitespacesAndNewlines), toFileAt: fileURL)
+
+                    mutableString.replaceCharacters(in: match.range, with: "")
+                }
+                
+                let reminder = mutableString.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !reminder.isEmpty {
+                    append(content: reminder, toFileAt: canonicalOutput)
+                }
             }
         }
+        
+        try writeResult()
     }
     
     // MARK: - Write result
     
+    private mutating func append(content: String, toFileAt url: URL) {
+        if let currentContent = resultContentPerFile[url] {
+            resultContentPerFile[url] = currentContent.appending("\n\n").appending(content)
+        }
+        else {
+            resultContentPerFile[url] = content
+        }
+    }
+    
+    private mutating func writeResult() throws {
+        for (url, content) in resultContentPerFile {
+            try write(content: content, to: url)
+        }
+    }
+
     private func createOutputFolderIfNeeded(folder: URL) throws {
         if FileManager.default.fileExists(atPath: folder.path) == false {
             try FileManager.default.createDirectory(atPath: folder.path, withIntermediateDirectories: true)
