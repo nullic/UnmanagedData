@@ -21,6 +21,7 @@ enum AttributeType: String, Codable {
     case int16 = "Integer 16"
     case int32 = "Integer 32"
     case int64 = "Integer 64"
+    case decimal = "Decimal"
     case double = "Double"
     case string = "String"
     case bool = "Boolean"

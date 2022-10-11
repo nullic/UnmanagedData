@@ -8,6 +8,7 @@ struct Attribute {
     let defaultValue: String?
     let transformerName: String?
     let customClassName: String?
+    var userInfo: UserInfo?
     
     var usesPrimitiveValue: Bool {
         let usesScalarValue = self.usesScalarValue ?? false
@@ -18,6 +19,7 @@ struct Attribute {
         case .int32: return usesScalarValue
         case .int64: return usesScalarValue
         case .double: return usesScalarValue
+        case .decimal: return false
         case .string: return false
         case .bool: return usesScalarValue
         case .uri: return false
@@ -34,6 +36,7 @@ struct Attribute {
         case .int32: return usesScalarValue ? "Int32" : "NSNumber"
         case .int64: return usesScalarValue ? "Int64" : "NSNumber"
         case .double: return usesScalarValue ? "Double" : "NSNumber"
+        case .decimal: return "NSDecimalNumber"
         case .string: return "String"
         case .bool: return usesScalarValue ? "Bool" : "NSNumber"
         case .uri: return "URL"
@@ -51,6 +54,7 @@ extension Attribute: Codable {
         case defaultValue = "defaultValueString"
         case transformerName = "valueTransformerName"
         case customClassName
+        case userInfo
     }
     
     enum EncodingKeys: CodingKey {
@@ -63,6 +67,7 @@ extension Attribute: Codable {
         case customClassName
         case swiftType
         case usesPrimitiveValue
+        case userInfo
     }
     
     init(from decoder: Decoder) throws {
@@ -75,6 +80,7 @@ extension Attribute: Codable {
         defaultValue = try container.decodeIfPresent(String.self, forKey: .defaultValue)
         transformerName = try container.decodeIfPresent(String.self, forKey: .transformerName)
         customClassName = try container.decodeIfPresent(String.self, forKey: .customClassName)
+        userInfo = try container.decodeIfPresent(UserInfo.self, forKey: .userInfo)
     }
     
     func encode(to encoder: Encoder) throws {
@@ -88,5 +94,7 @@ extension Attribute: Codable {
         try container.encodeIfPresent(self.defaultValue, forKey: .defaultValue)
         try container.encodeIfPresent(self.transformerName, forKey: .transformerName)
         try container.encodeIfPresent(self.customClassName, forKey: .customClassName)
+        try container.encode(self.usesPrimitiveValue, forKey: .usesPrimitiveValue)
+        try container.encodeIfPresent(self.userInfo, forKey: .userInfo)
     }
 }

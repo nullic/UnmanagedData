@@ -8,8 +8,9 @@ final class Entity {
     var attributes: [Attribute]
     var relationships: [Relationship]
     var fetchedProperties: [FetchedProperty]
+    var userInfo: UserInfo?
     
-    init(name: String, parentName: String?, className: String, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty]) {
+    init(name: String, parentName: String?, className: String, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
         self.name = name
         self.parentName = parentName
         self.className = className
@@ -17,6 +18,7 @@ final class Entity {
         self.attributes = attributes
         self.relationships = relationships
         self.fetchedProperties = fetchedProperties
+        self.userInfo = userInfo
     }
 }
 
@@ -29,6 +31,7 @@ extension Entity: Codable {
         case attributes = "attribute"
         case relationships = "relationship"
         case fetchedProperties = "fetchedProperty"
+        case userInfo
     }
     
     enum EncodingKeys: String, CodingKey {
@@ -39,6 +42,7 @@ extension Entity: Codable {
         case attributes
         case relationships
         case fetchedProperties
+        case userInfo
     }
     
     convenience init(from decoder: Decoder) throws {
@@ -50,8 +54,9 @@ extension Entity: Codable {
         let attributes = try container.decode([Attribute].self, forKey: .attributes)
         let relationships = try container.decode([Relationship].self, forKey: .relationships)
         let fetchedProperties = try container.decode([FetchedProperty].self, forKey: .fetchedProperties)
+        let userInfo = try container.decodeIfPresent(UserInfo.self, forKey: .userInfo)
         
-        self.init(name: name, parentName: parentName, className: className, codeGenerationType: codeGenerationType, attributes: attributes, relationships: relationships, fetchedProperties: fetchedProperties)
+        self.init(name: name, parentName: parentName, className: className, codeGenerationType: codeGenerationType, attributes: attributes, relationships: relationships, fetchedProperties: fetchedProperties, userInfo: userInfo)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -63,5 +68,6 @@ extension Entity: Codable {
         try container.encode(self.attributes, forKey: .attributes)
         try container.encode(self.relationships, forKey: .relationships)
         try container.encode(self.fetchedProperties, forKey: .fetchedProperties)
+        try container.encodeIfPresent(self.userInfo, forKey: .userInfo)
     }
 }

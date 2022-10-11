@@ -12,6 +12,7 @@ final class Relationship {
     var inverseName: String?
     var inverseEntity: String?
     var inverseClassName: String?
+    var userInfo: UserInfo?
     
     var swiftType: String {
         let destination = destinationClassName ?? destinationEntity
@@ -22,7 +23,7 @@ final class Relationship {
         }
     }
     
-    init(name: String, isOptional: Bool, maxCount: UInt, toMany: Bool, deletionRule: DeletionRule, isOrdered: Bool, destinationEntity: String, destinationClassName: String?, inverseName: String?, inverseEntity: String?, inverseClassName: String?) {
+    init(name: String, isOptional: Bool, maxCount: UInt, toMany: Bool, deletionRule: DeletionRule, isOrdered: Bool, destinationEntity: String, destinationClassName: String?, inverseName: String?, inverseEntity: String?, inverseClassName: String?, userInfo: UserInfo?) {
         self.name = name
         self.isOptional = isOptional
         self.maxCount = maxCount
@@ -33,6 +34,7 @@ final class Relationship {
         self.destinationClassName = destinationClassName
         self.inverseName = inverseName
         self.inverseEntity = inverseEntity
+        self.userInfo = userInfo
     }
 }
 
@@ -48,6 +50,7 @@ extension Relationship: Codable {
         case destinationClassName
         case inverseName
         case inverseEntity
+        case userInfo
     }
     
     enum EncodingKeys: CodingKey {
@@ -63,6 +66,7 @@ extension Relationship: Codable {
         case inverseEntity
         case inverseClassName
         case swiftType
+        case userInfo
     }
     
     convenience init(from decoder: Decoder) throws {
@@ -77,8 +81,9 @@ extension Relationship: Codable {
         let destinationEntity = try container.decode(String.self, forKey: .destinationEntity)
         let inverseName = try container.decodeIfPresent(String.self, forKey: .inverseName)
         let inverseEntity = try container.decodeIfPresent(String.self, forKey: .inverseEntity)
+        let userInfo = try container.decodeIfPresent(UserInfo.self, forKey: .userInfo)
         
-        self.init(name: name, isOptional: optional, maxCount: maxCount, toMany: toMany, deletionRule: deletionRule, isOrdered: ordered, destinationEntity: destinationEntity, destinationClassName: nil, inverseName: inverseName, inverseEntity: inverseEntity, inverseClassName: nil)
+        self.init(name: name, isOptional: optional, maxCount: maxCount, toMany: toMany, deletionRule: deletionRule, isOrdered: ordered, destinationEntity: destinationEntity, destinationClassName: nil, inverseName: inverseName, inverseEntity: inverseEntity, inverseClassName: nil, userInfo: userInfo)
     }
     
     func encode(to encoder: Encoder) throws {
@@ -94,6 +99,7 @@ extension Relationship: Codable {
         try container.encodeIfPresent(self.inverseName, forKey: .inverseName)
         try container.encodeIfPresent(self.inverseEntity, forKey: .inverseEntity)
         try container.encodeIfPresent(self.inverseClassName, forKey: .inverseClassName)
+        try container.encodeIfPresent(self.userInfo, forKey: .userInfo)
         
         try container.encode(self.swiftType, forKey: .swiftType)
     }
