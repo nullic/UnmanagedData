@@ -41,6 +41,10 @@ extension CoreDataModel: Codable {
                     relation.inverseClassName = entities.first(where: { inverseEntity == $0.name })?.className
                 }
             }
+            
+            for property in entity.fetchedProperties {
+                property.fetchRequest.className = entities.first(where: { property.fetchRequest.entity == $0.name })?.className
+            }
         }
     }
 }
