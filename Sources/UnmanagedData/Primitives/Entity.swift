@@ -4,16 +4,18 @@ final class Entity {
     var name: String
     var parentName: String?
     var className: String
+    var parentClassName: String?
     var codeGenerationType: CodeGenerationType?
     var attributes: [Attribute]
     var relationships: [Relationship]
     var fetchedProperties: [FetchedProperty]
     var userInfo: UserInfo?
     
-    init(name: String, parentName: String?, className: String, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
+    init(name: String, parentName: String?, className: String, parentClassName: String? = nil, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
         self.name = name
         self.parentName = parentName
         self.className = className
+        self.parentClassName = parentClassName
         self.codeGenerationType = codeGenerationType
         self.attributes = attributes
         self.relationships = relationships
@@ -38,6 +40,7 @@ extension Entity: Codable {
         case name
         case parentName
         case className
+        case parentClassName
         case codeGenerationType
         case attributes
         case relationships
@@ -64,6 +67,7 @@ extension Entity: Codable {
         try container.encode(self.name, forKey: .name)
         try container.encodeIfPresent(self.parentName, forKey: .parentName)
         try container.encode(self.className, forKey: .className)
+        try container.encodeIfPresent(self.parentClassName, forKey: .parentClassName)
         try container.encodeIfPresent(self.codeGenerationType, forKey: .codeGenerationType)
         try container.encode(self.attributes, forKey: .attributes)
         try container.encode(self.relationships, forKey: .relationships)

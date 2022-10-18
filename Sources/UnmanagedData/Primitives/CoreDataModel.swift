@@ -35,6 +35,10 @@ extension CoreDataModel: Codable {
     
     func populateMissingData() {
         for entity in entities {
+            if let parentName = entity.parentName {
+                entity.parentClassName = entities.first(where: { parentName == $0.name })?.className
+            }
+            
             for relation in entity.relationships {
                 relation.destinationClassName = entities.first(where: { relation.destinationEntity == $0.name })?.className
                 if let inverseEntity = relation.inverseEntity {

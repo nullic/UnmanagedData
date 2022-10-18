@@ -46,9 +46,9 @@ final class FetchRequest: Codable {
     var name: String
     var entity: String
     var className: String?
-    var predicateString: String
+    var predicateString: String?
     
-    init(name: String, entity: String, className: String? = nil, predicateString: String) {
+    init(name: String, entity: String, className: String? = nil, predicateString: String?) {
         self.name = name
         self.entity = entity
         self.className = className
