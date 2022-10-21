@@ -36,19 +36,51 @@ extension CoreDataModel: Codable {
     func populateMissingData() {
         for entity in entities {
             if let parentName = entity.parentName {
-                entity.parentClassName = entities.first(where: { parentName == $0.name })?.className
+                entity.parentClassName = findEntity(name: parentName)?.className
             }
             
             for relation in entity.relationships {
-                relation.destinationClassName = entities.first(where: { relation.destinationEntity == $0.name })?.className
+                relation.destinationClassName = findEntity(name: relation.destinationEntity)?.className
                 if let inverseEntity = relation.inverseEntity {
                     relation.inverseClassName = entities.first(where: { inverseEntity == $0.name })?.className
                 }
             }
             
             for property in entity.fetchedProperties {
-                property.fetchRequest.className = entities.first(where: { property.fetchRequest.entity == $0.name })?.className
+                property.fetchRequest.className = findEntity(name: property.fetchRequest.entity)?.className
             }
+            
+            entity.allAttributes = findAll(for: entity)
+            entity.allRelationships = findAll(for: entity)
+            entity.allFetchedProperties = findAll(for: entity)
         }
+    }
+    
+    private func findEntity(name: String) -> Entity? {
+        entities.first(where: { name == $0.name })
+    }
+    
+    private func findAll(for entity: Entity) -> [Relationship] {
+        var result: [Relationship] = entity.relationships
+        if let parentName = entity.parentName, let parent = findEntity(name: parentName) {
+            result.append(contentsOf: findAll(for: parent))
+        }
+        return result
+    }
+    
+    private func findAll(for entity: Entity) -> [Attribute] {
+        var result: [Attribute] = entity.attributes
+        if let parentName = entity.parentName, let parent = findEntity(name: parentName) {
+            result.append(contentsOf: findAll(for: parent))
+        }
+        return result
+    }
+    
+    private func findAll(for entity: Entity) -> [FetchedProperty] {
+        var result: [FetchedProperty] = entity.fetchedProperties
+        if let parentName = entity.parentName, let parent = findEntity(name: parentName) {
+            result.append(contentsOf: findAll(for: parent))
+        }
+        return result
     }
 }

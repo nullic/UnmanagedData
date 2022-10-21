@@ -5,13 +5,17 @@ final class Entity {
     var parentName: String?
     var className: String
     var parentClassName: String?
+    var isAbstract: Bool
     var codeGenerationType: CodeGenerationType?
     var attributes: [Attribute]
     var relationships: [Relationship]
     var fetchedProperties: [FetchedProperty]
+    var allAttributes: [Relationship] = []
+    var allRelationships: [Relationship] = []
+    var allFetchedProperties: [FetchedProperty] = []
     var userInfo: UserInfo?
     
-    init(name: String, parentName: String?, className: String, parentClassName: String? = nil, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
+    init(name: String, parentName: String?, className: String, parentClassName: String? = nil, isAbstract: Bool, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
         self.name = name
         self.parentName = parentName
         self.className = className
@@ -21,6 +25,7 @@ final class Entity {
         self.relationships = relationships
         self.fetchedProperties = fetchedProperties
         self.userInfo = userInfo
+        self.isAbstract = isAbstract
     }
 }
 
@@ -29,6 +34,7 @@ extension Entity: Codable {
         case name
         case parentName = "parentEntity"
         case className = "representedClassName"
+        case isAbstract
         case codeGenerationType
         case attributes = "attribute"
         case relationships = "relationship"
@@ -41,10 +47,14 @@ extension Entity: Codable {
         case parentName
         case className
         case parentClassName
+        case isAbstract
         case codeGenerationType
         case attributes
         case relationships
         case fetchedProperties
+        case allAttributes
+        case allRelationships
+        case allFetchedProperties
         case userInfo
     }
     
@@ -53,13 +63,14 @@ extension Entity: Codable {
         let name = try container.decode(String.self, forKey: .name)
         let parentName = try container.decodeIfPresent(String.self, forKey: .parentName)
         let className = try container.decode(String.self, forKey: .className)
+        let isAbstract = try container.decodeIfPresent(Bool.self, forKey: .isAbstract)
         let codeGenerationType = try container.decodeIfPresent(CodeGenerationType.self, forKey: .codeGenerationType)
         let attributes = try container.decode([Attribute].self, forKey: .attributes)
         let relationships = try container.decode([Relationship].self, forKey: .relationships)
         let fetchedProperties = try container.decode([FetchedProperty].self, forKey: .fetchedProperties)
         let userInfo = try container.decodeIfPresent(UserInfo.self, forKey: .userInfo)
         
-        self.init(name: name, parentName: parentName, className: className, codeGenerationType: codeGenerationType, attributes: attributes, relationships: relationships, fetchedProperties: fetchedProperties, userInfo: userInfo)
+        self.init(name: name, parentName: parentName, className: className, isAbstract: isAbstract ?? false, codeGenerationType: codeGenerationType, attributes: attributes, relationships: relationships, fetchedProperties: fetchedProperties, userInfo: userInfo)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -68,10 +79,14 @@ extension Entity: Codable {
         try container.encodeIfPresent(self.parentName, forKey: .parentName)
         try container.encode(self.className, forKey: .className)
         try container.encodeIfPresent(self.parentClassName, forKey: .parentClassName)
+        try container.encode(self.isAbstract, forKey: .isAbstract)
         try container.encodeIfPresent(self.codeGenerationType, forKey: .codeGenerationType)
         try container.encode(self.attributes, forKey: .attributes)
         try container.encode(self.relationships, forKey: .relationships)
         try container.encode(self.fetchedProperties, forKey: .fetchedProperties)
+        try container.encode(self.allAttributes, forKey: .allAttributes)
+        try container.encode(self.allRelationships, forKey: .allRelationships)
+        try container.encode(self.allFetchedProperties, forKey: .allFetchedProperties)
         try container.encodeIfPresent(self.userInfo, forKey: .userInfo)
     }
 }
