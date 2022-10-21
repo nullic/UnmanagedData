@@ -10,7 +10,7 @@ final class Entity {
     var attributes: [Attribute]
     var relationships: [Relationship]
     var fetchedProperties: [FetchedProperty]
-    var allAttributes: [Relationship] = []
+    var allAttributes: [Attribute] = []
     var allRelationships: [Relationship] = []
     var allFetchedProperties: [FetchedProperty] = []
     var userInfo: UserInfo?

@@ -1,0 +1,54 @@
+{% macro relationValueType relation %}{% if relation.toMany %}{% if relation.isOrdered %}NSOrderedSet{% else %}NSSet{% endif %}{% else %}{{ relation.destinationClassName }}{% endif %}{% endmacro %}
+
+{% for entity in entities %}
+// unmanageddata:file:{{ entity.className }}.generated.swift
+import CoreData
+import Foundation
+
+@objc({{ entity.className }})
+public class {{ entity.className }}: {%+ if entity.parentClassName %}{{ entity.parentClassName }}{% else %}NSManagedObject{% endif %} {
+    @nonobjc public class func fetchRequest() -> NSFetchRequest<{{ entity.className }}> {
+        return NSFetchRequest<{{ entity.className }}>(entityName: "{{ entity.name }}")
+    }
+
+    // MARK: - Attributes
+
+    {% for attribute in entity.attributes %}
+    @NSManaged public var {{ attribute.name }}: {{ attribute.swiftType }} {% if not attribute.usesScalarValue %}{% if attribute.isOptional %}?{% else %}!{% endif %}{% endif +%}
+    {% endfor %}
+
+    // MARK: - Relationships
+
+    {% for relation in entity.relationships %}
+    @NSManaged public var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% else %}!{% endif +%}
+    {% endfor %}
+
+    // MARK: - Fetched Properties
+
+    {% for property in entity.fetchedProperties %}
+    public var {{ property.name }}: [{{ property.fetchRequest.className }}]{% if property.isOptional %}?{% endif +%} {
+        value(forKey: "{{ property.name }}") as? [{{ property.fetchRequest.className }}]
+    }
+    {% endfor %}
+}
+
+{% for relation in entity.relationships where relation.toMany %}
+// MARK: - {{ relation.name|upperFirstLetter }}
+
+extension {{ entity.className }} {
+    @objc(add{{ relation.name|upperFirstLetter }}Object:)
+    @NSManaged public func addTo{{ relation.name|upperFirstLetter }}(_ value: {{ relation.destinationClassName }})
+
+    @objc(remove{{ relation.name|upperFirstLetter }}Object:)
+    @NSManaged public func removeFrom{{ relation.name|upperFirstLetter }}(_ value: {{ relation.destinationClassName }})
+
+    @objc(add{{ relation.name|upperFirstLetter }}:)
+    @NSManaged public func addTo{{ relation.name|upperFirstLetter }}(_ value: {% if relation.isOrdered %}NSOrderedSet{% else %}NSSet{% endif %})
+
+    @objc(remove{{ relation.name|upperFirstLetter }}:)
+    @NSManaged public func removeFrom{{ relation.name|upperFirstLetter }}(_ value: {% if relation.isOrdered %}NSOrderedSet{% else %}NSSet{% endif %})
+}
+
+{% endfor %}
+// unmanageddata:file:end
+{% endfor %}

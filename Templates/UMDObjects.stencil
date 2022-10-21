@@ -1,0 +1,161 @@
+{% macro relationValueType relation %}{% if relation.toMany %}[UMD{{ relation.destinationEntity }}]{% else %}UMD{{ relation.destinationEntity }}{% endif %}{% endmacro %}
+{% macro relationValueRead relation %}{% if relation.toMany %}(__managedObject.{{ relation.name }}?.{% if relation.isOrdered %}array{% else %}allObjects{% endif %} as? [{{ relation.destinationClassName }}]){% else %}__managedObject.{{ relation.name }}{% endif %}{% endmacro %}
+
+import CoreData
+
+protocol UMDObjectConvertable {
+    associatedtype ResultType
+    func umdObject() -> ResultType
+}
+
+extension NSManagedObject: UMDObjectConvertable {
+    func umdObject() {}
+}
+
+// MARK: - UMD Objects
+
+{% for entity in entities %}
+
+extension UMDObjectConvertable where Self == {{ entity.className }} {
+    func umdObject()-> UMD{{ entity.name }}{ UMD{{ entity.name }}(self) }
+}
+
+extension Array where Element == {{ entity.className }} {
+    func umdObject() -> [UMD{{ entity.name }}] { map { $0.umdObject() } }
+}
+
+{% endfor %}
+
+{% for entity in entities %}
+// unmanageddata:file:UMD{{ entity.name }}.generated.swift
+import CoreData
+import Foundation
+
+class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}{% endif %} {    
+    private let __managedObject: {{ entity.className }}
+    private let __context: NSManagedObjectContext
+    {% if not entity.parentName %}
+    private var __observer: NSObjectProtocol?
+    {% endif %}
+
+    // MARK: - Attributes
+
+    {% for attribute in entity.attributes %}
+    public var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%}
+    {% endfor %}
+
+    // MARK: - Relationships
+
+    {% for relation in entity.relationships %}
+    public var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} {
+        __context.performSafe { _ in
+            {%+ call relationValueRead relation %}{% if relation.isOptional %}?{% else %}!{% endif %}.umdObject() {% if not relation.isOptional and relation.toMany %} ?? []{% endif +%}
+        }
+    }
+    {% endfor %}
+
+    // MARK: - Fetched Properties
+
+    {% for property in entity.fetchedProperties %}
+    public var {{ property.name }}: [UMD{{ property.fetchRequest.entity }}]{% if property.isOptional %}?{% endif +%} {
+        __context.performSafe { _ in
+            (__managedObject.value(forKey: "{{ property.name }}") as? [{{ property.fetchRequest.className }}])?.umdObject()
+        }
+    }
+    {% endfor %}
+
+    // MARK: - Implementation
+
+    public init(_ managedObject: {{ entity.className }}) {
+        __managedObject = managedObject
+        __context = managedObject.managedObjectContext!
+
+        {% for attribute in entity.attributes %}
+        var {{ attribute.name }}: {{ attribute.swiftType }}?
+        {% endfor %}
+        
+        __context.performAndWait {
+            {% for attribute in entity.attributes %}
+            {{ attribute.name }} = managedObject.{{ attribute.name }}
+            {% endfor %}
+        }
+        
+        {% for attribute in entity.attributes %}
+        self.{{ attribute.name }} = {{ attribute.name }}{% if not attribute.isOptional %}!{% endif +%}
+        {% endfor %}
+
+        {%+ if entity.parentName %}super.init(managedObject){% else %}subsribeContext(){% endif +%}
+    }
+
+    {% if not entity.parentName %}
+    deinit {
+        unsubsribeContext()
+    }
+    
+    private func subsribeContext() {
+        __observer = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextObjectsDidChange, object: __context, queue: nil) { [weak self] notification in
+            self?.process(notification: notification)
+        }
+    }
+    
+    private func unsubsribeContext() {
+        if let observer = __observer {
+            NotificationCenter.default.removeObserver(observer)
+            __observer = nil
+        }
+    }
+    
+    private func process(notification: Notification) {
+        let objectID = __managedObject.objectID
+        var hasChanges: Bool = false
+        var isDeleted: Bool = false
+
+        if hasChanges == false, let objects = notification.userInfo?[NSUpdatedObjectsKey] as? NSSet {
+            if objects.first(where: { ($0 as? NSManagedObject)?.objectID == objectID }) != nil {
+                hasChanges = true
+            }
+        }
+
+        if hasChanges == false, let objects = notification.userInfo?[NSDeletedObjectsKey] as? NSSet {
+            if objects.first(where: { ($0 as? NSManagedObject)?.objectID == objectID }) != nil {
+                hasChanges = true
+                isDeleted = true
+            }
+        }
+
+        if hasChanges == false, let objects = notification.userInfo?[NSRefreshedObjectsKey] as? NSSet {
+            if objects.first(where: { ($0 as? NSManagedObject)?.objectID == objectID }) != nil {
+                hasChanges = true
+            }
+        }
+
+        if isDeleted == true {
+            unsubsribeContext()
+            didDelete()
+        } else if hasChanges == true {
+            willChange()
+            updateValues()
+        }
+    }
+    
+    public func willChange() {}
+    
+    public func didChange() {}
+    
+    public func didDelete() {}
+    {% endif %}
+
+    {%+ if entity.parentName %}override {%+ endif %}public func updateValues() {
+        {% for attribute in entity.attributes %}
+        {{ attribute.name }} = __managedObject.{{ attribute.name }}{% if not attribute.isOptional and not attribute.usesPrimitiveValue%}!{% endif +%}
+        {% endfor %}
+        
+        {% if parentName %}
+        super.updateValues()
+        {% else %}
+        didChange()
+        {% endif %}
+    }
+}
+// unmanageddata:file:end
+{% endfor %}

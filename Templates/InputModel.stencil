@@ -1,0 +1,139 @@
+{% macro relationValueType relation %}{% if relation.toMany %}[{{ relation.destinationEntity }}InputModelType]{% else %}{{ relation.destinationEntity }}InputModelType{% endif %}{% endmacro %}
+{% macro inputModelType entity %}{% for relation in entity.allRelationships where not relation.userInfo.skipInputModel %}any {{ entity.name }}InputModel{% break %}{% empty %}{{ entity.name }}InputModel{% endfor %}{% endmacro %}
+
+import CoreData
+import Foundation
+
+{% for entity in entities %}
+public protocol {{ entity.name }}InputModel{% if entity.parentName %}: {{ entity.parentName }}InputModel{% endif +%} {
+    {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
+    associatedtype {{ relation.destinationEntity }}InputModelType: {{ relation.destinationEntity }}InputModel
+    {% endfor %}
+
+    {% for attribute in entity.attributes where not attribute.userInfo.skipInputModel %}
+    var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} { get }
+    {% endfor %}
+
+    {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
+    var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} { get }
+    {% endfor %}
+}
+
+{% endfor %}
+
+{% for entity in entities %}
+// unmanageddata:file:{{ entity.className }}.generated.swift
+import CoreData
+import Foundation
+
+extension {{ entity.className }} {
+    public enum Key {
+        {% for attribute in entity.attributes %}
+        case {{ attribute.name }}
+        {% endfor %}
+        {% for relation in entity.relationships %}
+        case {{ relation.name }}(String?)
+        {% endfor %}
+        {% for property in entity.fetchedProperties %}
+        case {{ property.name }}
+        {% endfor %}
+
+        public var keyPath: String { 
+            switch self {
+                {% for attribute in entity.attributes %}
+                case .{{ attribute.name }}: return "{{ attribute.name }}"
+                {% endfor %}
+                {% for relation in entity.relationships %}
+                case .{{ relation.name }}(let subpath): 
+                    if let subpath = subpath {
+                        return "{{ relation.name }}.\(subpath)"
+                    } else {
+                        return "{{ relation.name }}"
+                    }
+                {% endfor %}
+                {% for property in entity.fetchedProperties %}
+                case .{{ property.name }}: return "{{ property.name }}"
+                {% endfor %}
+            }    
+        }
+    }
+
+    {% if entity.userInfo.uniqueKey %}
+    private static func findUnique(inputModel: {%+ call inputModelType entity %}, in context: NSManagedObjectContext) throws -> {{ entity.className }}? {
+        let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
+        request.predicate = NSPredicate(format: "%K == %@", argumentArray: [Key.{{ entity.userInfo.uniqueKey }}.keyPath, inputModel.{{ entity.userInfo.uniqueKey }}])
+        request.fetchLimit = 1
+        return try context.fetch(request).first
+    }
+    {% endif %}
+
+    @discardableResult
+    public static func insert(inputModel: {%+ call inputModelType entity %}, in context: NSManagedObjectContext) -> {{ entity.className }} {
+        {% for subclass in entities where subclass.parentName == entity.name %}
+        {%+ if forloop.first %}let object: {{ entity.className }}{% endif +%}
+        {%+ if not forloop.first %}else {%+ endif %}if let inputModel = inputModel as? {%+ call inputModelType subclass %} {
+            object = {{ subclass.className }}.insert(inputModel: inputModel, in: context)
+        }
+        {% if forloop.last %}
+        else {
+            {% if entity.userInfo.uniqueKey %}
+            object = (try? {{ entity.className }}.findUnique(inputModel: inputModel, in: context)) ?? {{ entity.className }}(context: context)
+            {% else %}
+            object = {{ entity.className }}(context: context)
+            {% endif %}
+        }
+        {% endif %}
+        {% empty %}
+        {% if entity.userInfo.uniqueKey %}
+        let object = (try? {{ entity.className }}.findUnique(inputModel: inputModel, in: context)) ?? {{ entity.className }}(context: context)
+        {% else %}
+        let object = {{ entity.className }}(context: context)
+        {% endif %}
+        {% endfor %}
+
+        {% for attribute in entity.attributes where not attribute.userInfo.skipInputModel %}
+        object.{{ attribute.name }} = inputModel.{{ attribute.name }}
+        {% endfor %}
+        {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
+            {% if relation.toMany %}
+        object.{{ relation.name }} = NSSet(array: {{ relation.destinationClassName }}.insert(inputModels: inputModel.{{ relation.name }}{% if relation.isOptional +%} ?? []{% endif %}, in: context))
+            {% else %}
+                {% if relation.isOptional %}
+        if let {{ relation.name }} = inputModel.{{ relation.name }} {
+            object.{{ relation.name }} = {{ relation.destinationClassName }}.insert(inputModel: {{ relation.name }}, in: context) 
+        }
+                {% else %}
+        object.{{ relation.name }} = {{ relation.destinationClassName }}.insert(inputModel: inputModel.{{ relation.name }}, in: context)
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+        return object
+    }
+
+    @discardableResult
+    public static func insert(inputModels: [{% call inputModelType entity %}], in context: NSManagedObjectContext) -> [{{ entity.className }}] {
+        inputModels.map { insert(inputModel: $0, in: context) }
+    }
+
+    public static func getFirst(value: NSObjectProtocol?, key: Key, sortDescriptors: [NSSortDescriptor]? = nil, in context: NSManagedObjectContext) throws -> {{ entity.className }}? {
+        let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
+        request.predicate = NSPredicate(format: "%K == %@", argumentArray: [key.keyPath, value ?? NSNull()])
+        request.fetchLimit = 1
+        return try context.fetch(request).first
+    }
+
+    public static func getAll(value: NSObjectProtocol?, key: Key, sortDescriptors: [NSSortDescriptor]? = nil, in context: NSManagedObjectContext) throws -> [{{ entity.className }}] {
+        let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
+        request.predicate = NSPredicate(format: "%K == %@", argumentArray: [key.keyPath, value ?? NSNull()])
+        return try context.fetch(request)
+    }
+
+    public static func getAll(predicate: NSPredicate?, sortDescriptors: [NSSortDescriptor]?, in context: NSManagedObjectContext) throws -> [{{ entity.className }}] {
+        let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
+        request.predicate = predicate
+        request.sortDescriptors = sortDescriptors
+        return try context.fetch(request)
+    }
+}
+// unmanageddata:file:end
+{% endfor %}

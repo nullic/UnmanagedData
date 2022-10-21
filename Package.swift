@@ -7,7 +7,7 @@ let package = Package(
     name: "UnmanagedData",
     platforms: [.macOS(.v10_14)],
     products: [
-        .executable(name: "UnmanagedData", targets: ["UnmanagedData"]),
+        .executable(name: "umd", targets: ["UnmanagedData"]),
     ],
     dependencies: [
         .package(url: "https://github.com/CoreOffice/XMLCoder", from: "0.0.0"),

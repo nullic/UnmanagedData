@@ -1,0 +1,30 @@
+{% macro relationValueType relation %}{% if relation.toMany %}[{{ relation.name|upperFirstLetter }}OutputModelType]{% else %}{{ relation.name|upperFirstLetter }}OutputModelType{% endif %}{% endmacro %}
+import Foundation
+
+{% for entity in entities %}
+public protocol {{ entity.name }}OutputModel{% if entity.parentName %}: {{ entity.parentName }}OutputModel{% endif %} {
+    {% for relation in entity.relationships %}
+    associatedtype {{ relation.name|upperFirstLetter }}OutputModelType: {{ relation.destinationEntity }}OutputModel
+    {% endfor %}
+    {% for property in entity.fetchedProperties %}
+    associatedtype {{ property.name|upperFirstLetter }}OutputModelType: {{ property.fetchRequest.entity }}OutputModel
+    {% endfor %}
+
+    {% for attribute in entity.attributes %}
+    var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} { get }
+    {% endfor %}
+    {% for relation in entity.relationships %}
+    var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} { get }
+    {% endfor %}
+    {% for property in entity.fetchedProperties %}
+    var {{ property.name }}: [{{ property.name|upperFirstLetter }}OutputModelType]{% if property.isOptional %}?{% endif +%} { get }
+    {% endfor %}
+}
+
+{% endfor %}
+
+// unmanageddata:file:UMD.generated.swift
+{% for entity in entities %}
+extension UMD{{ entity.name }}: {{ entity.name }}OutputModel {}
+{% endfor %}
+// unmanageddata:file:end
