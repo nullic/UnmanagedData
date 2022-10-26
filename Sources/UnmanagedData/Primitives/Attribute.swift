@@ -18,6 +18,7 @@ struct Attribute {
         case .int16: return usesScalarValue
         case .int32: return usesScalarValue
         case .int64: return usesScalarValue
+        case .float: return usesScalarValue
         case .double: return usesScalarValue
         case .decimal: return false
         case .string: return false
@@ -35,6 +36,7 @@ struct Attribute {
         case .int16: return usesScalarValue ? "Int16" : "NSNumber"
         case .int32: return usesScalarValue ? "Int32" : "NSNumber"
         case .int64: return usesScalarValue ? "Int64" : "NSNumber"
+        case .float: return usesScalarValue ? "Float" : "NSNumber"
         case .double: return usesScalarValue ? "Double" : "NSNumber"
         case .decimal: return "NSDecimalNumber"
         case .string: return "String"
