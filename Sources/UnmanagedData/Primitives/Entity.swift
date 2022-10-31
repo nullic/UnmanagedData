@@ -5,6 +5,8 @@ final class Entity {
     var parentName: String?
     var className: String
     var parentClassName: String?
+    var children: [Entity]
+    var allChildren: [Entity]
     var isAbstract: Bool
     var codeGenerationType: CodeGenerationType?
     var attributes: [Attribute]
@@ -15,11 +17,13 @@ final class Entity {
     var allFetchedProperties: [FetchedProperty] = []
     var userInfo: UserInfo?
     
-    init(name: String, parentName: String?, className: String, parentClassName: String? = nil, isAbstract: Bool, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
+    init(name: String, parentName: String?, className: String, parentClassName: String? = nil, children: [Entity] = [], allChildren: [Entity] = [], isAbstract: Bool, codeGenerationType: CodeGenerationType?, attributes: [Attribute], relationships: [Relationship], fetchedProperties: [FetchedProperty], userInfo: UserInfo?) {
         self.name = name
         self.parentName = parentName
         self.className = className
         self.parentClassName = parentClassName
+        self.children = children
+        self.allChildren = allChildren
         self.codeGenerationType = codeGenerationType
         self.attributes = attributes
         self.relationships = relationships
@@ -47,6 +51,8 @@ extension Entity: Codable {
         case parentName
         case className
         case parentClassName
+        case children
+        case allChildren
         case isAbstract
         case codeGenerationType
         case attributes
@@ -79,6 +85,8 @@ extension Entity: Codable {
         try container.encodeIfPresent(self.parentName, forKey: .parentName)
         try container.encode(self.className, forKey: .className)
         try container.encodeIfPresent(self.parentClassName, forKey: .parentClassName)
+        try container.encode(self.children, forKey: .children)
+        try container.encode(self.allChildren, forKey: .allChildren)
         try container.encode(self.isAbstract, forKey: .isAbstract)
         try container.encodeIfPresent(self.codeGenerationType, forKey: .codeGenerationType)
         try container.encode(self.attributes, forKey: .attributes)

@@ -16,7 +16,7 @@ let package = Package(
         .package(url: "https://github.com/tattn/MoreCodable.git", from: "0.0.0"),
     ],
     targets: [
-        .target(name: "UnmanagedData", dependencies: [
+        .executableTarget(name: "UnmanagedData", dependencies: [
             .product(name: "XMLCoder", package: "XMLCoder"),
             .product(name: "StencilSwiftKit", package: "StencilSwiftKit"),
             .product(name: "MoreCodable", package: "MoreCodable"),
