@@ -4,6 +4,7 @@ struct CoreDataModel {
     var type: String
     var documentVersion: String
     var entities: [Entity]
+    var entitiesByName: [String: Entity]
 }
 
 extension CoreDataModel: Codable {
@@ -17,13 +18,23 @@ extension CoreDataModel: Codable {
         case type
         case documentVersion
         case entities
+        case entitiesByName
     }
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DecodingKeys.self)
+        let entities = try container.decode([Entity].self, forKey: .entities)
+        
         self.type = try container.decode(String.self, forKey: .type)
         self.documentVersion = try container.decode(String.self, forKey: .documentVersion)
-        self.entities = try container.decode([Entity].self, forKey: .entities)
+        
+        var entitiesByName: [String: Entity] = [:]
+        for entity in entities {
+            entitiesByName[entity.name] = entity
+        }
+        
+        self.entities = entities
+        self.entitiesByName = entitiesByName
     }
     
     func encode(to encoder: Encoder) throws {
@@ -31,6 +42,7 @@ extension CoreDataModel: Codable {
         try container.encode(self.type, forKey: .type)
         try container.encode(self.documentVersion, forKey: .documentVersion)
         try container.encode(self.entities, forKey: .entities)
+        try container.encode(self.entitiesByName, forKey: .entitiesByName)
     }
     
     func populateMissingData() {
