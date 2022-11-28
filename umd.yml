@@ -1,0 +1,8 @@
+xcdatamodel:
+  ./DataModel.xcdatamodel
+
+templates:
+  - ./Utils/UMDTemplate/
+  
+output:
+  ./Generated/
