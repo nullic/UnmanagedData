@@ -7,8 +7,6 @@ let package = Package(
     name: "UnmanagedData",
     products: [
         .executable(name: "umd", targets: ["UnmanagedData"]),
-        .plugin(name: "UnmanagedDataPlugin", targets: ["UnmanagedDataPlugin"]),
-        .plugin(name: "UnmanagedDataPlugin-Generate", targets: ["UnmanagedDataPlugin-Generate"]),
     ],
     dependencies: [
         .package(url: "https://github.com/CoreOffice/XMLCoder", from: "0.0.0"),
@@ -26,22 +24,6 @@ let package = Package(
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
             .product(name: "Yams", package: "Yams"),
             .product(name: "PathKit", package: "PathKit"),
-        ]),
-        
-        .plugin(name: "UnmanagedDataPlugin",
-                capability: .buildTool(),
-                dependencies: ["UnmanagedData"]),
-
-        .plugin(name: "UnmanagedDataPlugin-Generate",
-                capability: .command(
-                    intent: .custom(
-                        verb: "generate-code-from-core-data-model",
-                        description: "Creates source code from Core Data model"
-                    ),
-                    permissions: [
-                        .writeToPackageDirectory(reason: "This command generates source code")
-                    ]
-                ),
-                dependencies: ["UnmanagedData"]),
+        ])
     ]
 )
