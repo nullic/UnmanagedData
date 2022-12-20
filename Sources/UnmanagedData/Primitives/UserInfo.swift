@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Dmitriy Petrusevich on 11.10.22.
-//
-
 import Foundation
 
 struct UserInfo {
