@@ -1,25 +1,64 @@
-{% macro relationValueType relation %}{% if relation.toMany %}[{{ relation.destinationEntity }}InputModelType]{% else %}{{ relation.destinationEntity }}InputModelType{% endif %}{% endmacro %}
-{% macro inputModelType entity %}{% for relation in entity.allRelationships where not relation.userInfo.skipInputModel %}any {{ entity.name }}InputModel{% break %}{% empty %}{{ entity.name }}InputModel{% endfor %}{% endmacro %}
+{% macro identifiableModelType entity %}{% if entity.userInfo.uniqueKey %}{% call identifiableModelTypeByName entity.name %}{% endif %}{% endmacro %}
+{% macro identifiableModelTypeByName name %}{{ name }}IdentifiableModel{% endmacro %}
+{% macro inputModelType entity %}{% call inputModelTypeByName entity.name %}{% endmacro %}
+{% macro inputModelTypeByName name %}{% if name %}{{ name }}InputModel{% endif %}{% endmacro %}
+
+{% macro inputKey attribute %}{% if attribute.userInfo.inputKey %}{{ attribute.userInfo.inputKey }}{% else %}{{ attribute.name }}{% endif %}{% endmacro %}
+{% macro relationValueType relation %}{% if relation.toMany %}[{% call inputModelTypeByName relation.destinationEntity %}]{% else -%}
+    {% if relation.userInfo.relationOnly %}
+        {%- call identifiableModelTypeByName relation.destinationEntity %}
+    {% else %}
+        {%- call inputModelTypeByName relation.destinationEntity %}
+    {% endif %}
+{% endif %}
+{% endmacro %}
+
+{# Managed object 'Input' model #}
 
 import CoreData
 import Foundation
 
 {% for entity in entities %}
-public protocol {{ entity.name }}InputModel{% if entity.parentName %}: {{ entity.parentName }}InputModel{% endif +%} {
-    {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
-    associatedtype {{ relation.destinationEntity }}InputModelType: {{ relation.destinationEntity }}InputModel
-    {% endfor %}
+// MARK: - {{ entity.name }}
+{% set identifiableType %}{%+ call identifiableModelType entity %}{% endset %}
+{% set parentInputType %}{%+ call inputModelTypeByName entity.parentName %}{% endset %}
 
+public protocol {%+ call inputModelType entity %}{{ ': ' if parentInputType or identifiableType }}{{ parentInputType }}{{ ', ' if parentInputType and identifiableType }}{{ identifiableType }} {
     {% for attribute in entity.attributes where not attribute.userInfo.skipInputModel %}
-    var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} { get }
+    var {%+ call inputKey attribute %}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} { get }
     {% endfor %}
 
     {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
-    var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} { get }
+    var {%+ call inputKey relation %}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} { get }
     {% endfor %}
 }
 
 {% endfor %}
+
+{# Managed object 'Identifiable' model #}
+
+// unmanageddata:file:IdentifiableModel.generated.swift
+import Foundation
+
+{% for entity in entities where entity.userInfo.uniqueKey %}
+// MARK: - {{ entity.name }}
+{% set uniqueKeyName %}{% call inputKey entity.attributesByName[entity.userInfo.uniqueKey] %}{% endset %}
+{% set uniqueKeyType %}{{ entity.attributesByName[entity.userInfo.uniqueKey].swiftType }}{% endset %}
+{% set protolocName %}{% call identifiableModelType entity %}{% endset %}
+
+public protocol {{ protolocName }} {
+    var {{ uniqueKeyName }}: {{ uniqueKeyType }} { get }
+}
+
+extension {{ uniqueKeyType }}: {{ protolocName }} {
+    @_implements({{ protolocName }}, {{ uniqueKeyName }})
+    public var {{ uniqueKeyName }}{{ protolocName }}{% call identifiableModelType entity %}: {{ uniqueKeyType }} { self }
+}
+
+{% endfor %}
+// unmanageddata:file:end
+
+{# Managed object extension #}
 
 {% for entity in entities %}
 // unmanageddata:file:{{ entity.className }}.generated.swift
@@ -59,65 +98,80 @@ extension {{ entity.className }} {
     }
 
     {% if entity.userInfo.uniqueKey %}
-    private static func findUnique(inputModel: {%+ call inputModelType entity %}, in context: NSManagedObjectContext) throws -> {{ entity.className }}? {
+    public static func findUnique(inputModel: {%+ call identifiableModelType entity %}, in context: NSManagedObjectContext) throws -> {{ entity.className }}? {
         let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
-        request.predicate = NSPredicate(format: "%K == %@", argumentArray: [Key.{{ entity.userInfo.uniqueKey }}.keyPath, inputModel.{{ entity.userInfo.uniqueKey }}])
+        request.predicate = NSPredicate(format: "%K == %@", argumentArray: [Key.{{ entity.userInfo.uniqueKey }}.keyPath, inputModel.{% call inputKey entity.attributesByName[entity.userInfo.uniqueKey] %}])
         request.fetchLimit = 1
         return try context.fetch(request).first
     }
     {% endif %}
 
     @discardableResult
-    public static func insert(inputModel: {%+ call inputModelType entity %}, in context: NSManagedObjectContext) -> {{ entity.className }} {
+    public static func insert(inputModel: {%+ call inputModelType entity %}, in context: NSManagedObjectContext) throws -> {{ entity.className }} {
         {% for subclass in entities where subclass.parentName == entity.name %}
         {%+ if forloop.first %}let object: {{ entity.className }}{% endif +%}
         {%+ if not forloop.first %}else {%+ endif %}if let inputModel = inputModel as? {%+ call inputModelType subclass %} {
-            object = {{ subclass.className }}.insert(inputModel: inputModel, in: context)
+            object = try {{ subclass.className }}.insert(inputModel: inputModel, in: context)
         }
         {% if forloop.last %}
         else {
             {% if entity.userInfo.uniqueKey %}
-            object = (try? {{ entity.className }}.findUnique(inputModel: inputModel, in: context)) ?? {{ entity.className }}(context: context)
+            object = (try {{ entity.className }}.findUnique(inputModel: inputModel, in: context)) ?? {{ entity.className }}(context: context)
             {% else %}
             object = {{ entity.className }}(context: context)
             {% endif %}
+            try object.populate(with: inputModel)
         }
         {% endif %}
         {% empty %}
-        {% if entity.userInfo.uniqueKey %}
-        let object = (try? {{ entity.className }}.findUnique(inputModel: inputModel, in: context)) ?? {{ entity.className }}(context: context)
-        {% else %}
+            {% if entity.userInfo.uniqueKey %}
+        let object = (try {{ entity.className }}.findUnique(inputModel: inputModel, in: context)) ?? {{ entity.className }}(context: context)
+            {% else %}
         let object = {{ entity.className }}(context: context)
-        {% endif %}
+            {% endif %}
+        try object.populate(with: inputModel)
         {% endfor %}
 
-        {% for attribute in entity.attributes where not attribute.userInfo.skipInputModel %}
-        object.{{ attribute.name }} = inputModel.{{ attribute.name }}
-        {% endfor %}
-        {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
-            {% if relation.toMany %}
-        object.{{ relation.name }} = NSSet(array: {{ relation.destinationClassName }}.insert(inputModels: inputModel.{{ relation.name }}{% if relation.isOptional +%} ?? []{% endif %}, in: context))
-            {% else %}
-                {% if relation.isOptional %}
-        if let {{ relation.name }} = inputModel.{{ relation.name }} {
-            object.{{ relation.name }} = {{ relation.destinationClassName }}.insert(inputModel: {{ relation.name }}, in: context) 
-        }
-                {% else %}
-        object.{{ relation.name }} = {{ relation.destinationClassName }}.insert(inputModel: inputModel.{{ relation.name }}, in: context)
-                {% endif %}
-            {% endif %}
-        {% endfor %}
         return object
     }
 
+    public func populate(with inputModel: {%+ call inputModelType entity %}) throws {
+        {% for attribute in entity.allAttributes where not attribute.userInfo.skipInputModel %}
+        {{ attribute.name }} = inputModel.{% call inputKey attribute +%}
+        {% endfor %}
+
+        {% for relation in entity.allRelationships where not relation.userInfo.skipInputModel %}
+            {% if relation.toMany %}
+        {{ relation.name }} = NSSet(array: try {{ relation.destinationClassName }}.insert(inputModels: inputModel.{% call inputKey relation %}{% if relation.isOptional +%} ?? []{% endif %}, in: managedObjectContext!))
+            {% else %}
+                {% if relation.isOptional %}
+        if let {{ relation.name }} = inputModel.{% call inputKey relation %} {
+                    {% if relation.userInfo.relationOnly %}
+            self.{{ relation.name }} = try {{ relation.destinationClassName }}.findUnique(inputModel: {{ relation.name }}, in: managedObjectContext!)
+                    {% else %}
+            self.{{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: {{ relation.name }}, in: managedObjectContext!)
+                    {% endif %}
+        }
+                {% else %}
+                    {% if relation.userInfo.relationOnly %}
+        {{ relation.name }} = try {{ relation.destinationClassName }}.findUnique(inputModel: inputModel.{% call inputKey relation %}, in: managedObjectContext!)
+                    {% else %}
+        {{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: inputModel.{% call inputKey relation %}, in: managedObjectContext!)
+                    {% endif %}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    }
+
     @discardableResult
-    public static func insert(inputModels: [{% call inputModelType entity %}], in context: NSManagedObjectContext) -> [{{ entity.className }}] {
-        inputModels.map { insert(inputModel: $0, in: context) }
+    public static func insert(inputModels: [{% call inputModelType entity %}], in context: NSManagedObjectContext) throws -> [{{ entity.className }}] {
+        try inputModels.map { try insert(inputModel: $0, in: context) }
     }
 
     public static func getFirst(value: NSObjectProtocol?, key: Key, sortDescriptors: [NSSortDescriptor]? = nil, in context: NSManagedObjectContext) throws -> {{ entity.className }}? {
         let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
         request.predicate = NSPredicate(format: "%K == %@", argumentArray: [key.keyPath, value ?? NSNull()])
+        request.sortDescriptors = sortDescriptors
         request.fetchLimit = 1
         return try context.fetch(request).first
     }
@@ -125,6 +179,16 @@ extension {{ entity.className }} {
     public static func getAll(value: NSObjectProtocol?, key: Key, sortDescriptors: [NSSortDescriptor]? = nil, in context: NSManagedObjectContext) throws -> [{{ entity.className }}] {
         let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
         request.predicate = NSPredicate(format: "%K == %@", argumentArray: [key.keyPath, value ?? NSNull()])
+        request.sortDescriptors = sortDescriptors
+        return try context.fetch(request)
+    }
+
+    public static func getAll(values: NSArray, key: Key, sortDescriptors: [NSSortDescriptor]? = nil, in context: NSManagedObjectContext) throws -> [{{ entity.className }}] {
+        guard values.count > 0 else { return [] }
+
+        let request: NSFetchRequest<{{ entity.className }}> = {{ entity.className }}.fetchRequest()
+        request.predicate = NSPredicate(format: "%K IN %@", argumentArray: [key.keyPath, values])
+        request.sortDescriptors = sortDescriptors
         return try context.fetch(request)
     }
 

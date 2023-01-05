@@ -1,4 +1,8 @@
 {% macro relationValueType relation %}{% if relation.toMany %}[{{ relation.name|upperFirstLetter }}OutputModelType]{% else %}{{ relation.name|upperFirstLetter }}OutputModelType{% endif %}{% endmacro %}
+{% macro relationMockValueType relation %}{% if relation.toMany %}[{{ relation.destinationEntity }}OutputModelMock]{% else %}{{ relation.destinationEntity }}OutputModelMock{% endif %}{% endmacro %}
+{% macro addAnyType entity %}{% if entity.allRelationships or entity.allFetchedProperties %}any {%+ endif %}{% endmacro %}
+
+
 import Foundation
 
 {% for entity in entities %}
@@ -23,8 +27,39 @@ public protocol {{ entity.name }}OutputModel{% if entity.parentName %}: {{ entit
 
 {% endfor %}
 
-// unmanageddata:file:UMD.generated.swift
 {% for entity in entities %}
+// unmanageddata:file:UMD{{ entity.name }}.generated.swift
 extension UMD{{ entity.name }}: {{ entity.name }}OutputModel {}
+// unmanageddata:file:end
+{% endfor %}
+
+{% macro caseName child parent %}{{ child.name|replace:parent.name,""|lowerFirstLetter }}{% endmacro %}
+// unmanageddata:file:OutputModelChildren.generated.swift
+import Foundation
+
+{% for entity in entities where entity.allChildren and not entity.parentName %}
+public enum {{ entity.name }}Children {
+    {% for child in entity.allChildren where not child.isAbstract %}
+    case {%+ call caseName child entity %}({% call addAnyType child %}{{ child.name }}OutputModel)
+    {% endfor %}
+    {% if not entity.isAbstract %}
+    case __unknown({% call addAnyType child %}{{ entity.name }}OutputModel)
+    {% endif %} 
+}
+
+public extension {{ entity.name }}OutputModel {
+    var asChild: {{ entity.name }}Children {
+    {% for child in entity.allChildren where not child.isAbstract %}
+        if let model = self as? ({% call addAnyType child %}{{ child.name }}OutputModel) {
+            return .{%+ call caseName child entity %}(model)
+        }
+    {% endfor %}
+    {% if entity.isAbstract %}
+        preconditionFailure("Unknown child type")
+    {% else %}
+        return .__unknown(self)
+    {% endif %}
+    }
+}
 {% endfor %}
 // unmanageddata:file:end

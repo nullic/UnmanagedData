@@ -3,13 +3,31 @@
 
 import CoreData
 
+class UMDObject {}
+
 protocol UMDObjectConvertable {
     associatedtype ResultType
     func umdObject() -> ResultType
 }
 
+private let umdTransformMap = [
+{% for entity in entities %}
+    "{{ entity.className }}": { (object: NSManagedObject) -> UMDObject in return {{ entity.className }}.umdObject(object as! {{ entity.className }}) },
+{% endfor %}
+]
+
 extension NSManagedObject: UMDObjectConvertable {
-    func umdObject() {}
+    func umdObject() -> UMDObject {
+        if let closure = umdTransformMap["\(type(of: self))"] {
+            return closure(self)
+        } else {
+            preconditionFailure()
+        }
+    }
+}
+
+extension Array where Element == NSManagedObject {
+    func umdObject() -> [UMDObject] { map { $0.umdObject() } }
 }
 
 // MARK: - UMD Objects
@@ -17,11 +35,15 @@ extension NSManagedObject: UMDObjectConvertable {
 {% for entity in entities %}
 
 extension UMDObjectConvertable where Self == {{ entity.className }} {
-    func umdObject()-> UMD{{ entity.name }}{ UMD{{ entity.name }}(self) }
+    func umdObject() -> UMD{{ entity.name }} { (self as NSManagedObject).umdObject() as! UMD{{ entity.name }} }
+}
+
+extension {{ entity.className }} {
+    class func umdObject(_ object: {{ entity.className }}) -> UMD{{ entity.name }} { UMD{{ entity.name }}(object) }
 }
 
 extension Array where Element == {{ entity.className }} {
-    func umdObject() -> [UMD{{ entity.name }}] { map { $0.umdObject() } }
+    func umdObject() -> [UMD{{ entity.name }}] { map { ($0 as NSManagedObject).umdObject() as! UMD{{ entity.name }} } }
 }
 
 {% endfor %}
@@ -31,7 +53,7 @@ extension Array where Element == {{ entity.className }} {
 import CoreData
 import Foundation
 
-class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}{% endif %} {    
+class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}{% else %}: UMDObject{% endif %} {
     private let __managedObject: {{ entity.className }}
     private let __context: NSManagedObjectContext
     {% if not entity.parentName %}
@@ -48,7 +70,7 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
 
     {% for relation in entity.relationships %}
     public var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} {
-        __context.performSafe { _ in
+        __context.performAndWait {
             {%+ call relationValueRead relation %}{% if relation.isOptional %}?{% else %}!{% endif %}.umdObject() {% if not relation.isOptional and relation.toMany %} ?? []{% endif +%}
         }
     }
@@ -58,7 +80,7 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
 
     {% for property in entity.fetchedProperties %}
     public var {{ property.name }}: [UMD{{ property.fetchRequest.entity }}]{% if property.isOptional %}?{% endif +%} {
-        __context.performSafe { _ in
+        __context.performAndWait {
             (__managedObject.value(forKey: "{{ property.name }}") as? [{{ property.fetchRequest.className }}])?.umdObject()
         }
     }
@@ -84,7 +106,12 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
         self.{{ attribute.name }} = {{ attribute.name }}{% if not attribute.isOptional %}!{% endif +%}
         {% endfor %}
 
-        {%+ if entity.parentName %}super.init(managedObject){% else %}subsribeContext(){% endif +%}
+        {% if entity.parentName %}
+        super.init(managedObject)
+        {% else %}
+        super.init()
+        subsribeContext()
+        {% endif %}
     }
 
     {% if not entity.parentName %}
