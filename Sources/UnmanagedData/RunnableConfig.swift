@@ -7,13 +7,31 @@ import MoreCodable
 import StencilSwiftKit
 import Yams
 
+private let generatedFileHeader = "// Generated using UnmagedData\n// DO NOT EDIT"
+
 struct RunnableConfig: Decodable {
     var xcdatamodel: Path
     var output: Path
     var templates: [Path]
+    var prune: Bool
 
     var modelXMLURL: URL { xcdatamodel.url.appendingPathComponent("contents") }
     private lazy var resultContentPerFile: [URL: String] = [:]
+    
+    enum CodingKeys: CodingKey {
+        case xcdatamodel
+        case output
+        case templates
+        case prune
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.xcdatamodel = try container.decode(Path.self, forKey: .xcdatamodel)
+        self.output = try container.decode(Path.self, forKey: .output)
+        self.templates = try container.decode([Path].self, forKey: .templates)
+        self.prune = try container.decodeIfPresent(Bool.self, forKey: .prune) ?? false
+    }
 }
 
 extension RunnableConfig {
@@ -26,12 +44,13 @@ extension RunnableConfig {
         config.output = config.output.isRelative ? basePath + config.output : config.output
         config.templates = config.templates.map { $0.isRelative ? basePath + $0 : $0 }
         
-        self = try RunnableConfig(xcdatamodel: config.xcdatamodel, output: config.output, templates: config.templates)
+        self = try RunnableConfig(xcdatamodel: config.xcdatamodel, output: config.output, templates: config.templates, prune: config.prune)
     }
     
-    init(xcdatamodel: Path, output: Path, templates: [Path]) throws {
+    init(xcdatamodel: Path, output: Path, templates: [Path], prune: Bool) throws {
         self.xcdatamodel = xcdatamodel
         self.output = output
+        self.prune = prune
         
         var allPaths: [Path] = []
         for path in templates {
@@ -124,6 +143,10 @@ extension RunnableConfig {
         }
         
         try writeResult()
+
+        if prune {
+            try pruneFiles()
+        }
     }
     
     // MARK: - Write result
@@ -139,8 +162,29 @@ extension RunnableConfig {
     
     private mutating func writeResult() throws {
         for (url, content) in resultContentPerFile {
-            print("UnmanagedData: Write result to \(url.path)")
+            print("Write result to: \(url.path)")
             try write(content: content, to: url)
+        }
+    }
+    
+    private mutating func pruneFiles() throws {
+        var isDirectory: ObjCBool = false
+        _ = FileManager.default.fileExists(atPath: output.string, isDirectory: &isDirectory)
+        
+        let workingDirectory = isDirectory.boolValue ? output.string : (output.string as NSString).deletingLastPathComponent
+        guard let enumerator = FileManager.default.enumerator(atPath: workingDirectory) else { return }
+        
+        while let file = enumerator.nextObject() as? String {
+            if file.hasSuffix(".swift") {
+                let fileURL = output.url.appendingPathComponent(file)
+                if resultContentPerFile[fileURL] == nil {
+                    let content = try String(contentsOfFile: fileURL.path, encoding: .utf8)
+                    if content.hasPrefix(generatedFileHeader) {
+                        print("Prune file: \(fileURL.path)")
+                        try FileManager.default.removeItem(at: fileURL)
+                    }
+                }
+            }
         }
     }
     
@@ -153,8 +197,7 @@ extension RunnableConfig {
     private func write(content: String, to: URL) throws {
         let fullContent =
     """
-    // Generated using UnmagedData
-    // DO NOT EDIT
+    \(generatedFileHeader)
     
     \(content)
     

@@ -6,3 +6,5 @@ templates:
   
 output:
   ./Generated/
+  
+prune: false

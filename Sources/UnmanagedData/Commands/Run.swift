@@ -16,6 +16,9 @@ struct Run: ParsableCommand {
     @Option(name: .customLong("template"), help: "Path to template.", completion: .file(extensions: ["stencil"]))
     var templatePaths: [Path]
     
+    @Option(name: .customLong("prune"), help: "Remove old generated files")
+    var prune: Bool = false
+    
     var modelXMLURL: URL { modelPath.url.appendingPathComponent("contents") }
     
     mutating func validate() throws {
@@ -30,7 +33,7 @@ struct Run: ParsableCommand {
     
     mutating func run() throws {
         print("UnmanagedData: Will execute 'run' command")
-        var config = try RunnableConfig(xcdatamodel: modelPath, output: outputPath, templates: templatePaths)
+        var config = try RunnableConfig(xcdatamodel: modelPath, output: outputPath, templates: templatePaths, prune: prune)
         try config.run()
     }
 }
