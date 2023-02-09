@@ -2,8 +2,9 @@
 {% macro relationMockValueType relation %}{% if relation.toMany %}[{{ relation.destinationEntity }}OutputModelMock]{% else %}{{ relation.destinationEntity }}OutputModelMock{% endif %}{% endmacro %}
 {% macro addAnyType entity %}{% if entity.allRelationships or entity.allFetchedProperties %}any {%+ endif %}{% endmacro %}
 
-
+import Combine
 import Foundation
+{% if arguments.dbModuleName %}import {{ arguments.dbModuleName }}{% endif +%}
 
 {% for entity in entities %}
 public protocol {{ entity.name }}OutputModel{% if entity.parentName %}: {{ entity.parentName }}OutputModel{% endif %} {
@@ -23,6 +24,10 @@ public protocol {{ entity.name }}OutputModel{% if entity.parentName %}: {{ entit
     {% for property in entity.fetchedProperties %}
     var {{ property.name }}: [{{ property.name|upperFirstLetter }}OutputModelType]{% if property.isOptional %}?{% endif +%} { get }
     {% endfor %}
+
+    {% if not entity.parentName %}
+    var didChangePublisher: PassthroughSubject<Void, Never> { get }
+    {% endif %}
 }
 
 {% endfor %}
@@ -61,5 +66,46 @@ public extension {{ entity.name }}OutputModel {
     {% endif %}
     }
 }
+{% endfor %}
+// unmanageddata:file:end
+
+// unmanageddata:file:OutputModelMock.generated.swift
+import Combine
+import Foundation
+{% if arguments.dbModuleName %}import {{ arguments.dbModuleName }}{% endif +%}
+
+{% for entity in entities %}
+public class {{ entity.name }}OutputModelMock: {%+ if entity.parentName %}{{ entity.parentName }}OutputModelMock, {%+ endif %}{{ entity.name }}OutputModel {
+    {% for attribute in entity.attributes %}
+    private var __{{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% else %}!{% endif +%}
+    public var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} {
+        get { __{{ attribute.name }} }
+        set { __{{ attribute.name }} = newValue }
+    }
+    {% endfor %}
+
+    {% for relation in entity.relationships %}
+    private var __{{ relation.name }}: {%+ call relationMockValueType relation %}{% if relation.isOptional %}?{% else %}!{% endif +%}
+    public var {{ relation.name }}: {%+ call relationMockValueType relation %}{% if relation.isOptional %}?{% endif +%} {
+        get { __{{ relation.name }} }
+        set { __{{ relation.name }} = newValue }
+    }
+    {% endfor %}
+
+    {% for property in entity.fetchedProperties %}
+    private var __{{ property.name }}: [{{ property.fetchRequest.entity }}OutputModelMock]{% if property.isOptional %}?{% else %}!{% endif +%}
+    public var {{ property.name }}: [{{ property.fetchRequest.entity }}OutputModelMock]{% if property.isOptional %}?{% endif +%} {
+        get { __{{ property.name }} }
+        set { __{{ property.name }} = newValue }
+    }
+    {% endfor %}
+
+    public let didChangePublisher: PassthroughSubject<Void, Never> = PassthroughSubject()
+
+    {% if not entity.parentName %}
+    public init() {}
+    {% endif %}
+}
+
 {% endfor %}
 // unmanageddata:file:end

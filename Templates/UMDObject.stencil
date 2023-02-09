@@ -2,6 +2,7 @@
 {% macro relationValueRead relation %}{% if relation.toMany %}(__managedObject.{{ relation.name }}?.{% if relation.isOrdered %}array{% else %}allObjects{% endif %} as? [{{ relation.destinationClassName }}]){% else %}__managedObject.{{ relation.name }}{% endif %}{% endmacro %}
 
 import CoreData
+{% if arguments.dbModuleName %}import {{ arguments.dbModuleName }}{% endif +%}
 
 class UMDObject {}
 
@@ -12,7 +13,7 @@ protocol UMDObjectConvertable {
 
 private let umdTransformMap = [
 {% for entity in entities %}
-    "{{ entity.className }}": { (object: NSManagedObject) -> UMDObject in return {{ entity.className }}.umdObject(object as! {{ entity.className }}) },
+    "{{ entity.className }}": { (object: NSManagedObject) -> UMDObject in return {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }}.umdObject(object as! {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }}) },
 {% endfor %}
 ]
 
@@ -34,15 +35,15 @@ extension Array where Element == NSManagedObject {
 
 {% for entity in entities %}
 
-extension UMDObjectConvertable where Self == {{ entity.className }} {
+extension UMDObjectConvertable where Self == {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }} {
     func umdObject() -> UMD{{ entity.name }} { (self as NSManagedObject).umdObject() as! UMD{{ entity.name }} }
 }
 
-extension {{ entity.className }} {
-    class func umdObject(_ object: {{ entity.className }}) -> UMD{{ entity.name }} { UMD{{ entity.name }}(object) }
+extension {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }} {
+    class func umdObject(_ object: {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }}) -> UMD{{ entity.name }} { UMD{{ entity.name }}(object) }
 }
 
-extension Array where Element == {{ entity.className }} {
+extension Array where Element == {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }} {
     func umdObject() -> [UMD{{ entity.name }}] { map { ($0 as NSManagedObject).umdObject() as! UMD{{ entity.name }} } }
 }
 
@@ -50,14 +51,17 @@ extension Array where Element == {{ entity.className }} {
 
 {% for entity in entities %}
 // unmanageddata:file:UMD{{ entity.name }}.generated.swift
+import Combine
 import CoreData
 import Foundation
+{% if arguments.dbModuleName %}import {{ arguments.dbModuleName }}{% endif +%}
 
 class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}{% else %}: UMDObject{% endif %} {
     private let __managedObject: {{ entity.className }}
     private let __context: NSManagedObjectContext
     {% if not entity.parentName %}
     private var __observer: NSObjectProtocol?
+    public let didChangePublisher: PassthroughSubject<Void, Never> = PassthroughSubject()
     {% endif %}
 
     // MARK: - Attributes
@@ -120,7 +124,7 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
     }
     
     private func subsribeContext() {
-        __observer = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextObjectsDidChange, object: __context, queue: nil) { [weak self] notification in
+        __observer = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidSaveObjectIDs, object: __context, queue: nil) { [weak self] notification in
             self?.process(notification: notification)
         }
     }
@@ -137,21 +141,21 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
         var hasChanges: Bool = false
         var isDeleted: Bool = false
 
-        if hasChanges == false, let objects = notification.userInfo?[NSUpdatedObjectsKey] as? NSSet {
-            if objects.first(where: { ($0 as? NSManagedObject)?.objectID == objectID }) != nil {
+        if hasChanges == false, let objects = notification.userInfo?[NSUpdatedObjectIDsKey] as? Set<NSManagedObjectID> {
+            if objects.first(where: { $0 == objectID }) != nil {
                 hasChanges = true
             }
         }
 
-        if hasChanges == false, let objects = notification.userInfo?[NSDeletedObjectsKey] as? NSSet {
-            if objects.first(where: { ($0 as? NSManagedObject)?.objectID == objectID }) != nil {
+        if hasChanges == false, let objects = notification.userInfo?[NSDeletedObjectIDsKey] as? Set<NSManagedObjectID> {
+            if objects.first(where: { $0 == objectID }) != nil {
                 hasChanges = true
                 isDeleted = true
             }
         }
 
-        if hasChanges == false, let objects = notification.userInfo?[NSRefreshedObjectsKey] as? NSSet {
-            if objects.first(where: { ($0 as? NSManagedObject)?.objectID == objectID }) != nil {
+        if hasChanges == false, let objects = notification.userInfo?[NSRefreshedObjectIDsKey] as? Set<NSManagedObjectID> {
+            if objects.first(where: { $0 == objectID }) != nil {
                 hasChanges = true
             }
         }
@@ -167,7 +171,9 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
     
     public func willChange() {}
     
-    public func didChange() {}
+    public func didChange() {
+        didChangePublisher.send()
+    }
     
     public func didDelete() {}
     {% endif %}

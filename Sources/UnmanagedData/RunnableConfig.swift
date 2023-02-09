@@ -14,6 +14,7 @@ struct RunnableConfig: Decodable {
     var output: Path
     var templates: [Path]
     var prune: Bool
+    var arguments: [String: String]
 
     var modelXMLURL: URL { xcdatamodel.url.appendingPathComponent("contents") }
     private lazy var resultContentPerFile: [URL: String] = [:]
@@ -23,6 +24,7 @@ struct RunnableConfig: Decodable {
         case output
         case templates
         case prune
+        case arguments
     }
     
     init(from decoder: Decoder) throws {
@@ -31,6 +33,7 @@ struct RunnableConfig: Decodable {
         self.output = try container.decode(Path.self, forKey: .output)
         self.templates = try container.decode([Path].self, forKey: .templates)
         self.prune = try container.decodeIfPresent(Bool.self, forKey: .prune) ?? false
+        self.arguments = try container.decodeIfPresent([String: String].self, forKey: .arguments) ?? [:]
     }
 }
 
@@ -44,10 +47,10 @@ extension RunnableConfig {
         config.output = config.output.isRelative ? basePath + config.output : config.output
         config.templates = config.templates.map { $0.isRelative ? basePath + $0 : $0 }
         
-        self = try RunnableConfig(xcdatamodel: config.xcdatamodel, output: config.output, templates: config.templates, prune: config.prune)
+        self = try RunnableConfig(xcdatamodel: config.xcdatamodel, output: config.output, templates: config.templates, prune: config.prune, arguments: config.arguments)
     }
     
-    init(xcdatamodel: Path, output: Path, templates: [Path], prune: Bool) throws {
+    init(xcdatamodel: Path, output: Path, templates: [Path], prune: Bool, arguments: [String: String]) throws {
         self.xcdatamodel = xcdatamodel
         self.output = output
         self.prune = prune
@@ -67,6 +70,7 @@ extension RunnableConfig {
         }
         
         self.templates = allPaths
+        self.arguments = arguments
     }
 }
 
@@ -101,7 +105,9 @@ extension RunnableConfig {
         let model = try XMLDecoder().decode(CoreDataModel.self, from: data)
         model.populateMissingData()
         
-        let dictionary = try DictionaryEncoder().encode(model)
+        var dictionary = try DictionaryEncoder().encode(model)
+        dictionary["arguments"] = arguments
+
         let regexp = try NSRegularExpression(pattern: "^\\/\\/\\s?unmanageddata:file:(?<filename>.+?)$(?<content>.+?)^\\/\\/\\s?unmanageddata:file:end$", options: [.dotMatchesLineSeparators, .anchorsMatchLines])
         
         for templatePath in templates {
