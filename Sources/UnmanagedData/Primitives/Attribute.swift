@@ -25,6 +25,7 @@ struct Attribute {
         case .bool: return usesScalarValue
         case .uri: return false
         case .transformable: return false
+        case .uuid: return false
         }
     }
     
@@ -43,6 +44,7 @@ struct Attribute {
         case .bool: return usesScalarValue ? "Bool" : "NSNumber"
         case .uri: return "URL"
         case .transformable: return customClassName ?? "InvalidAttributeDeclaration"
+        case .uuid: return "UUID"
         }
     }
 }

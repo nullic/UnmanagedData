@@ -27,6 +27,7 @@ enum AttributeType: String, Codable {
     case string = "String"
     case bool = "Boolean"
     case uri = "URI"
+    case uuid = "UUID"
     case transformable = "Transformable"
 }
 

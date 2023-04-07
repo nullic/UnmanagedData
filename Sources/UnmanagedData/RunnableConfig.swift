@@ -128,6 +128,7 @@ extension RunnableConfig {
             let matches = regexp.matches(in: result, range: NSRange(location: 0, length: result.count))
             
             if matches.isEmpty {
+                append(content: "// Template: \(templatePath.lastComponent)", toFileAt: canonicalOutput)
                 append(content: result, toFileAt: canonicalOutput)
             } else {
                 let mutableString = NSMutableString(string: result)
@@ -143,6 +144,7 @@ extension RunnableConfig {
                 
                 let reminder = mutableString.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !reminder.isEmpty {
+                    append(content: "// Template: \(templatePath.lastComponent)", toFileAt: canonicalOutput)
                     append(content: reminder, toFileAt: canonicalOutput)
                 }
             }
