@@ -1,0 +1,59 @@
+import Combine
+import Foundation
+{% if arguments.dbModuleName %}import {{ arguments.dbModuleName }}{% endif +%}
+
+{% for entity in entities %}
+public protocol {{ entity.name }}SnapshotModel{% if entity.userInfo.uniqueKey %}: Identifiable{% endif %} {
+    {% for attribute in entity.allAttributes %}
+    {% if attribute.name == entity.userInfo.uniqueKey %}
+    @_implements(Identifiable, id)
+    {% endif %}
+    var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} { get set }
+    {% endfor %}
+}
+
+public extension {{ entity.name }}OutputModel {
+    func snapshot() -> {{ 'any ' if entity.userInfo.uniqueKey }}{{ entity.name }}SnapshotModel {
+        {{ entity.name }}SnapshotModelImpl(
+        {%- for attribute in entity.allAttributes -%}
+        {{ attribute.name }}: {{ attribute.name }}{{ ', ' if not forloop.last }}
+        {%- endfor -%}
+        )
+    }
+}
+
+public extension {{ entity.name }}SnapshotModel {
+    func copy() -> {{ 'any ' if entity.userInfo.uniqueKey }}{{ entity.name }}SnapshotModel {
+        {{ entity.name }}SnapshotModelImpl(
+        {%- for attribute in entity.allAttributes -%}
+        {{ attribute.name }}: {{ attribute.name }}{{ ', ' if not forloop.last }}
+        {%- endfor -%}
+        )
+    }
+}
+
+extension {{ entity.className }} {
+    func populate(with snapshotModel: {{ 'any ' if entity.userInfo.uniqueKey }}{{ entity.name }}SnapshotModel) {
+        {% for attribute in entity.allAttributes %}
+        {{ attribute.name }} = snapshotModel.{{ attribute.name }}
+        {% endfor %}
+    }
+}
+
+public final class {{ entity.name }}SnapshotModelImpl: {{ entity.name }}SnapshotModel {
+    {% for attribute in entity.allAttributes %}
+    public var {{ attribute.name }}: {{ attribute.swiftType }}{{ '?' if attribute.isOptional }}
+    {% endfor %}
+
+    public init(
+        {%- for attribute in entity.allAttributes -%}
+        {{ attribute.name }}: {{ attribute.swiftType }}{{ '?' if attribute.isOptional }}{{ ', ' if not forloop.last }}
+        {%- endfor -%}
+    ) {
+        {% for attribute in entity.allAttributes %}
+        self.{{ attribute.name }} = {{ attribute.name }}
+        {% endfor %}
+    }
+}
+
+{% endfor %}

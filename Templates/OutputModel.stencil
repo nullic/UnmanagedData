@@ -2,12 +2,19 @@
 {% macro relationMockValueType relation %}{% if relation.toMany %}[{{ relation.destinationEntity }}OutputModelMock]{% else %}{{ relation.destinationEntity }}OutputModelMock{% endif %}{% endmacro %}
 {% macro addAnyType entity %}{% if entity.allRelationships or entity.allFetchedProperties %}any {%+ endif %}{% endmacro %}
 
+{% macro addSubtypes entity %}
+{%- if entity.parentName %}: {{ entity.parentName }}OutputModel{% endif %}
+{%- if entity.userInfo.uniqueKey and entity.attributesByName[entity.userInfo.uniqueKey] %}
+    {%- if entity.parentName %}, Identifiable{% else %}: Identifiable {% endif %}
+{%- endif %}
+{% endmacro %}
+
 import Combine
 import Foundation
 {% if arguments.dbModuleName %}import {{ arguments.dbModuleName }}{% endif +%}
 
 {% for entity in entities %}
-public protocol {{ entity.name }}OutputModel{% if entity.parentName %}: {{ entity.parentName }}OutputModel{% endif %} {
+public protocol {{ entity.name }}OutputModel{% call addSubtypes entity %} {
     {% for relation in entity.relationships %}
     associatedtype {{ relation.name|upperFirstLetter }}OutputModelType: {{ relation.destinationEntity }}OutputModel
     {% endfor %}
@@ -16,16 +23,20 @@ public protocol {{ entity.name }}OutputModel{% if entity.parentName %}: {{ entit
     {% endfor %}
 
     {% for attribute in entity.attributes %}
+    {% if attribute.name == entity.userInfo.uniqueKey %}
+    @_implements(Identifiable, id)
+    {% endif %}
     var {{ attribute.name }}: {{ attribute.swiftType }}{% if attribute.isOptional %}?{% endif +%} { get }
     {% endfor %}
     {% for relation in entity.relationships %}
-    var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} { get }
+    var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% else %}!{% endif +%} { get }
     {% endfor %}
     {% for property in entity.fetchedProperties %}
-    var {{ property.name }}: [{{ property.name|upperFirstLetter }}OutputModelType]{% if property.isOptional %}?{% endif +%} { get }
+    var {{ property.name }}: [{{ property.name|upperFirstLetter }}OutputModelType]{% if property.isOptional %}?{% else %}!{% endif +%} { get }
     {% endfor %}
 
     {% if not entity.parentName %}
+    var isDeleted: Bool { get }
     var didChangePublisher: PassthroughSubject<Void, Never> { get }
     {% endif %}
 }
@@ -86,7 +97,7 @@ public class {{ entity.name }}OutputModelMock: {%+ if entity.parentName %}{{ ent
 
     {% for relation in entity.relationships %}
     private var __{{ relation.name }}: {%+ call relationMockValueType relation %}{% if relation.isOptional %}?{% else %}!{% endif +%}
-    public var {{ relation.name }}: {%+ call relationMockValueType relation %}{% if relation.isOptional %}?{% endif +%} {
+    public var {{ relation.name }}: {%+ call relationMockValueType relation %}{% if relation.isOptional %}?{% else %}!{% endif +%} {
         get { __{{ relation.name }} }
         set { __{{ relation.name }} = newValue }
     }
@@ -94,12 +105,13 @@ public class {{ entity.name }}OutputModelMock: {%+ if entity.parentName %}{{ ent
 
     {% for property in entity.fetchedProperties %}
     private var __{{ property.name }}: [{{ property.fetchRequest.entity }}OutputModelMock]{% if property.isOptional %}?{% else %}!{% endif +%}
-    public var {{ property.name }}: [{{ property.fetchRequest.entity }}OutputModelMock]{% if property.isOptional %}?{% endif +%} {
+    public var {{ property.name }}: [{{ property.fetchRequest.entity }}OutputModelMock]{% if property.isOptional %}?{% else %}!{% endif +%} {
         get { __{{ property.name }} }
         set { __{{ property.name }} = newValue }
     }
     {% endfor %}
 
+    public var isDeleted: Bool = false
     public let didChangePublisher: PassthroughSubject<Void, Never> = PassthroughSubject()
 
     {% if not entity.parentName %}

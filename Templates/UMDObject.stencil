@@ -13,7 +13,7 @@ protocol UMDObjectConvertable {
 
 private let umdTransformMap = [
 {% for entity in entities %}
-    "{{ entity.className }}": { (object: NSManagedObject) -> UMDObject in return {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }}.umdObject(object as! {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }}) },
+    "{{ entity.className }}": { (object: NSManagedObject) -> UMDObject in return {{ entity.className }}.umdObject(object as! {{ entity.className }}) },
 {% endfor %}
 ]
 
@@ -35,15 +35,15 @@ extension Array where Element == NSManagedObject {
 
 {% for entity in entities %}
 
-extension UMDObjectConvertable where Self == {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }} {
+extension UMDObjectConvertable where Self == {{ entity.className }} {
     func umdObject() -> UMD{{ entity.name }} { (self as NSManagedObject).umdObject() as! UMD{{ entity.name }} }
 }
 
-extension {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }} {
-    class func umdObject(_ object: {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }}) -> UMD{{ entity.name }} { UMD{{ entity.name }}(object) }
+extension {{ entity.className }} {
+    class func umdObject(_ object: {{ entity.className }}) -> UMD{{ entity.name }} { UMD{{ entity.name }}(object) }
 }
 
-extension Array where Element == {%+ if arguments.dbModuleName %}{{ arguments.dbModuleName }}.{% endif %}{{ entity.className }} {
+extension Array where Element == {{ entity.className }} {
     func umdObject() -> [UMD{{ entity.name }}] { map { ($0 as NSManagedObject).umdObject() as! UMD{{ entity.name }} } }
 }
 
@@ -60,7 +60,10 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
     private let __managedObject: {{ entity.className }}
     private let __context: NSManagedObjectContext
     {% if not entity.parentName %}
-    private var __observer: NSObjectProtocol?
+    private var __mergeObserver: NSObjectProtocol?
+    private var __saveObserver: NSObjectProtocol?
+    private var __isDeleted: Bool = false
+    public var isDeleted: Bool { __context.performAndWait { __managedObject.isDeleted } || __isDeleted }
     public let didChangePublisher: PassthroughSubject<Void, Never> = PassthroughSubject()
     {% endif %}
 
@@ -73,9 +76,9 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
     // MARK: - Relationships
 
     {% for relation in entity.relationships %}
-    public var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} {
+    public var {{ relation.name }}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% else %}!{% endif +%} {
         __context.performAndWait {
-            {%+ call relationValueRead relation %}{% if relation.isOptional %}?{% else %}!{% endif %}.umdObject() {% if not relation.isOptional and relation.toMany %} ?? []{% endif +%}
+            {%+ call relationValueRead relation %}?.umdObject()
         }
     }
     {% endfor %}
@@ -83,7 +86,7 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
     // MARK: - Fetched Properties
 
     {% for property in entity.fetchedProperties %}
-    public var {{ property.name }}: [UMD{{ property.fetchRequest.entity }}]{% if property.isOptional %}?{% endif +%} {
+    public var {{ property.name }}: [UMD{{ property.fetchRequest.entity }}]{% if property.isOptional %}?{% else %}!{% endif +%} {
         __context.performAndWait {
             (__managedObject.value(forKey: "{{ property.name }}") as? [{{ property.fetchRequest.className }}])?.umdObject()
         }
@@ -124,15 +127,24 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
     }
     
     private func subsribeContext() {
-        __observer = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidSaveObjectIDs, object: __context, queue: nil) { [weak self] notification in
+        __mergeObserver = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidMergeChangesObjectIDs, object: __context, queue: nil) { [weak self] notification in
+            self?.process(notification: notification)
+        }
+
+        __saveObserver = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidSaveObjectIDs, object: __context, queue: nil) { [weak self] notification in
             self?.process(notification: notification)
         }
     }
     
     private func unsubsribeContext() {
-        if let observer = __observer {
+        if let observer = __mergeObserver {
             NotificationCenter.default.removeObserver(observer)
-            __observer = nil
+            __mergeObserver = nil
+        }
+
+        if let observer = __saveObserver {
+            NotificationCenter.default.removeObserver(observer)
+            __saveObserver = nil
         }
     }
     
@@ -175,7 +187,10 @@ class UMD{{ entity.name }}{% if entity.parentName %}: UMD{{ entity.parentName }}
         didChangePublisher.send()
     }
     
-    public func didDelete() {}
+    public func didDelete() {
+        __isDeleted = true
+        didChangePublisher.send()
+    }
     {% endif %}
 
     {%+ if entity.parentName %}override {%+ endif %}public func updateValues() {

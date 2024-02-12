@@ -2,15 +2,10 @@
 {% macro identifiableModelTypeByName name %}{{ name }}IdentifiableModel{% endmacro %}
 {% macro inputModelType entity %}{% call inputModelTypeByName entity.name %}{% endmacro %}
 {% macro inputModelTypeByName name %}{% if name %}{{ name }}InputModel{% endif %}{% endmacro %}
+{% macro inputRelationInputType relation %}{{ relation.name | upperFirstLetter }}RelationInput{% endmacro %}
 
 {% macro inputKey attribute %}{% if attribute.userInfo.inputKey %}{{ attribute.userInfo.inputKey }}{% else %}{{ attribute.name }}{% endif %}{% endmacro %}
-{% macro relationValueType relation %}{% if relation.toMany %}[{% call inputModelTypeByName relation.destinationEntity %}]{% else -%}
-    {% if relation.userInfo.relationOnly %}
-        {%- call identifiableModelTypeByName relation.destinationEntity %}
-    {% else %}
-        {%- call inputModelTypeByName relation.destinationEntity %}
-    {% endif %}
-{% endif %}
+{% macro relationValueType relation %}{% if relation.toMany %}[{% call inputModelTypeByName relation.destinationEntity %}]{% else %}{% call inputModelTypeByName relation.destinationEntity %}{% endif %}
 {% endmacro %}
 
 {# Managed object 'Input' model #}
@@ -29,7 +24,44 @@ public protocol {%+ call inputModelType entity %}{{ ': ' if parentInputType or i
     {% endfor %}
 
     {% for relation in entity.relationships where not relation.userInfo.skipInputModel %}
-    var {%+ call inputKey relation %}: {%+ call relationValueType relation %}{% if relation.isOptional %}?{% endif +%} { get }
+    var {%+ call inputKey relation %}: {{ entity.className }}.{%+ call inputRelationInputType relation +%} { get }
+    {% endfor %}
+}
+
+extension {{ entity.className }} {
+    {% for relation in entity.relationships %}
+    public enum {%+ call inputRelationInputType relation +%} {
+        case ignore
+        {% if entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+        case link(_ model: {%+ call identifiableModelType entitiesByName[relation.destinationEntity] %}{{ '?' if relation.isOptional }})
+        {% endif %}
+        {% if not relation.toMany and not entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+        case update(_ model: {%+ call relationValueType relation %}{{ '?' if relation.isOptional }})
+        {% endif %}
+        case replace(_ model: {%+ call relationValueType relation %}{{ '?' if relation.isOptional }})
+        case destroyReplace(_ model: {%+ call relationValueType relation %}{{ '?' if relation.isOptional }})
+
+        public var inputModel: {%+ call relationValueType relation %}? {
+            switch self {
+        {% if not relation.toMany and not entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+            case .update(let model): return model
+        {% endif %}
+            case .replace(let model): return model
+            case .destroyReplace(let model): return model
+            default: return nil
+            }
+        }
+
+        {% if entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+        public var idModel: {%+ call identifiableModelType entitiesByName[relation.destinationEntity] %}? {
+            switch self {
+            case .link(let model): return model
+            default: return nil
+            }
+        }
+        {% endif %}
+    }
+    
     {% endfor %}
 }
 
@@ -79,20 +111,20 @@ extension {{ entity.className }} {
 
         public var keyPath: String { 
             switch self {
-                {% for attribute in entity.attributes %}
-                case .{{ attribute.name }}: return "{{ attribute.name }}"
-                {% endfor %}
-                {% for relation in entity.relationships %}
-                case .{{ relation.name }}(let subpath): 
-                    if let subpath = subpath {
-                        return "{{ relation.name }}.\(subpath)"
-                    } else {
-                        return "{{ relation.name }}"
-                    }
-                {% endfor %}
-                {% for property in entity.fetchedProperties %}
-                case .{{ property.name }}: return "{{ property.name }}"
-                {% endfor %}
+            {% for attribute in entity.attributes %}
+            case .{{ attribute.name }}: return "{{ attribute.name }}"
+            {% endfor %}
+            {% for relation in entity.relationships %}
+            case .{{ relation.name }}(let subpath): 
+                if let subpath = subpath {
+                    return "{{ relation.name }}.\(subpath)"
+                } else {
+                    return "{{ relation.name }}"
+                }
+            {% endfor %}
+            {% for property in entity.fetchedProperties %}
+            case .{{ property.name }}: return "{{ property.name }}"
+            {% endfor %}
             }    
         }
     }
@@ -142,23 +174,49 @@ extension {{ entity.className }} {
 
         {% for relation in entity.allRelationships where not relation.userInfo.skipInputModel %}
             {% if relation.toMany %}
-        {{ relation.name }} = NSSet(array: try {{ relation.destinationClassName }}.insert(inputModels: inputModel.{% call inputKey relation %}{% if relation.isOptional +%} ?? []{% endif %}, in: managedObjectContext!))
-            {% else %}
-                {% if relation.isOptional %}
-        if let {{ relation.name }} = inputModel.{% call inputKey relation %} {
-                    {% if relation.userInfo.relationOnly %}
-            self.{{ relation.name }} = try {{ relation.destinationClassName }}.findUnique(inputModel: {{ relation.name }}, in: managedObjectContext!)
-                    {% else %}
-            self.{{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: {{ relation.name }}, in: managedObjectContext!)
-                    {% endif %}
+        switch inputModel.{% call inputKey relation %} {
+        case .ignore: break
+        {% if entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+        case .link: assertionFailure()
+        {% endif %}
+        case .replace(let model):
+            {{ relation.name }} = {%+ if relation.isOrdered %}NSOrderedSet{% else %}NSSet{% endif %}(array: try {{ relation.destinationClassName }}.insert(inputModels: model{{ ' ?? []' if relation.isOptional }}, in: managedObjectContext!))
+        case .destroyReplace(let model):
+            self.{{ relation.name }}?.forEach { managedObjectContext?.delete($0 as! NSManagedObject) }
+            {{ relation.name }} = {%+ if relation.isOrdered %}NSOrderedSet{% else %}NSSet{% endif %}(array: try {{ relation.destinationClassName }}.insert(inputModels: model{{ ' ?? []' if relation.isOptional }}, in: managedObjectContext!))
         }
-                {% else %}
-                    {% if relation.userInfo.relationOnly %}
-        {{ relation.name }} = try {{ relation.destinationClassName }}.findUnique(inputModel: inputModel.{% call inputKey relation %}, in: managedObjectContext!)
-                    {% else %}
-        {{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: inputModel.{% call inputKey relation %}, in: managedObjectContext!)
-                    {% endif %}
-                {% endif %}
+            {% else %}
+        switch inputModel.{% call inputKey relation %} {
+            case .ignore: break
+            {% if entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+            case .link(let model):
+                self.{{ relation.name }} = nil
+                {%+ if relation.isOptional %}guard let model = model else { break }{% endif +%}
+                self.{{ relation.name }} = try {{ relation.destinationClassName }}.findUnique(inputModel: model, in: managedObjectContext!)
+            {% endif %}
+            {% if not entitiesByName[relation.destinationEntity].userInfo.uniqueKey %}
+            case .update(let model):
+                {%+ if relation.isOptional %}guard let model = model else { break }{% endif +%}
+                if self.{{ relation.name }} == nil {
+                    self.{{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: model, in: managedObjectContext!)
+                }
+                else {
+                    try self.{{ relation.name }}?.populate(with: model)
+                }
+            {% endif %}
+            case .replace(let model):
+                self.{{ relation.name }} = nil
+                {%+ if relation.isOptional %}guard let model = model else { break }{% endif +%}
+                self.{{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: model, in: managedObjectContext!)
+            case .destroyReplace(let model):
+                if let {{ relation.name }} = self.{{ relation.name }} {
+                    managedObjectContext?.delete({{ relation.name }})
+                    self.{{ relation.name }} = nil
+                }
+                {%+ if relation.isOptional %}guard let model = model else { break }{% endif +%}
+                self.{{ relation.name }} = try {{ relation.destinationClassName }}.insert(inputModel: model, in: managedObjectContext!)
+        }
+
             {% endif %}
         {% endfor %}
     }
