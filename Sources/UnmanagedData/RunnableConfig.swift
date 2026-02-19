@@ -7,7 +7,7 @@ import MoreCodable
 import StencilSwiftKit
 import Yams
 
-private let generatedFileHeader = "// Generated using UnmagedData\n// DO NOT EDIT"
+private let generatedFileHeader = "// Generated using UnmanagedData\n// DO NOT EDIT"
 
 struct RunnableConfig: Decodable {
     var xcdatamodel: Path
@@ -79,17 +79,17 @@ extension RunnableConfig {
 
 extension RunnableConfig {    
     private func loadModelData() throws -> Data {
-        let isAcccessing = modelXMLURL.startAccessingSecurityScopedResource()
+        let isAccessing = modelXMLURL.startAccessingSecurityScopedResource()
         defer {
-            if isAcccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
+            if isAccessing { modelXMLURL.stopAccessingSecurityScopedResource() }
         }
         return try Data(contentsOf: modelXMLURL)
     }
     
     private func loadTemplate(at templateURL: URL) throws -> Stencil.Template {
-        let isAcccessing = templateURL.startAccessingSecurityScopedResource()
+        let isAccessing = templateURL.startAccessingSecurityScopedResource()
         defer {
-            if isAcccessing { templateURL.stopAccessingSecurityScopedResource() }
+            if isAccessing { templateURL.stopAccessingSecurityScopedResource() }
         }
         
         let templatesPath = Path(templateURL.deletingLastPathComponent().path)
@@ -169,10 +169,14 @@ extension RunnableConfig {
     }
     
     private mutating func writeResult() throws {
+        let total = resultContentPerFile.count
+        var current = 0
         for (url, content) in resultContentPerFile {
-            print("Write result to: \(url.path)")
             try write(content: content, to: url)
+            current += 1
+            printProgress(current: current, total: total)
         }
+        print("")
     }
     
     private mutating func pruneFiles() throws {
@@ -202,6 +206,17 @@ extension RunnableConfig {
         }
     }
     
+    private func printProgress(current: Int, total: Int) {
+        let barWidth = 40
+        let percent = current * 100 / total
+        let filled = current * barWidth / total
+        let empty = barWidth - filled
+        let bar = String(repeating: "◼", count: filled)
+        let space = String(repeating: "◻", count: empty)
+        print("\r[\(bar)\(space)] \(percent)% (\(current)/\(total))", terminator: "")
+        fflush(stdout)
+    }
+
     private func write(content: String, to: URL) throws {
         let fullContent =
     """
